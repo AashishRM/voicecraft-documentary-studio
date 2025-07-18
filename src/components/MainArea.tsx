@@ -1,9 +1,19 @@
-import React from 'react';
-import { PanelLeftOpen, PanelRightOpen, Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, X } from 'lucide-react';
-import { useDroppable } from '@dnd-kit/core';
-import { Button } from './ui/button';
-import { Card, CardContent } from './ui/card';
-import { AudioClip } from './DocumentaryStudio';
+import React from "react";
+import {
+  PanelLeftOpen,
+  PanelRightOpen,
+  Upload,
+  Play,
+  Pause,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
+  X,
+} from "lucide-react";
+import { useDroppable } from "@dnd-kit/core";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { AudioClip } from "./DocumentaryStudio";
 
 interface MainAreaProps {
   leftSidebarOpen: boolean;
@@ -14,15 +24,19 @@ interface MainAreaProps {
   onRemoveClip: (clipId: string) => void;
 }
 
-const TimelineDropZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const TimelineDropZone: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { isOver, setNodeRef } = useDroppable({
-    id: 'timeline',
+    id: "timeline",
   });
 
   return (
     <div
       ref={setNodeRef}
-      className={`transition-colors ${isOver ? 'bg-primary/10 border-primary' : 'bg-card border-border'} border-2 border-dashed rounded-lg p-4 min-h-32`}
+      className={`transition-colors ${
+        isOver ? "bg-primary/10 border-primary" : "bg-card border-border"
+      } border-2 border-dashed rounded-lg p-4 min-h-32`}
     >
       {children}
     </div>
@@ -35,7 +49,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
   onToggleLeftSidebar,
   onToggleRightSidebar,
   timelineClips,
-  onRemoveClip
+  onRemoveClip,
 }) => {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
@@ -44,7 +58,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type.startsWith('video/')) {
+    if (file && file.type.startsWith("video/")) {
       setSelectedVideo(file);
     }
   };
@@ -63,9 +77,11 @@ export const MainArea: React.FC<MainAreaProps> = ({
               <PanelLeftOpen className="h-4 w-4" />
             </Button>
           )}
-          <h1 className="text-lg font-semibold">Documentary Voice-Over Studio</h1>
+          <h1 className="text-lg font-semibold">
+            Documentary Voice-Over Studio
+          </h1>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {!rightSidebarOpen && (
             <Button variant="ghost" size="sm" onClick={onToggleRightSidebar}>
@@ -82,7 +98,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
           <CardContent className="p-6">
             <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border">
               {selectedVideo ? (
-                <div className="w-full h-full">
+                <div className="w-full h-full relative group">
                   <video
                     className="w-full h-full object-contain rounded-lg"
                     controls
@@ -90,6 +106,26 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   >
                     Your browser does not support the video tag.
                   </video>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setSelectedVideo(null)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleChooseVideoClick}
+                      className="bg-background/80 backdrop-blur-sm"
+                    >
+                      Change Video
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center">
@@ -98,7 +134,9 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   <p className="text-muted-foreground mb-4">
                     Drag and drop your video file here or click to browse
                   </p>
-                  <Button onClick={handleChooseVideoClick}>Choose Video File</Button>
+                  <Button onClick={handleChooseVideoClick}>
+                    Choose Video File
+                  </Button>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -109,16 +147,29 @@ export const MainArea: React.FC<MainAreaProps> = ({
                 </div>
               )}
             </div>
-            
+
             {/* Timeline Markers */}
-            <div className="mt-4 h-8 bg-muted rounded border relative">
-              <div className="absolute inset-0 flex items-center px-2">
-                {[0, 10, 20, 30, 40, 50, 60].map((time) => (
-                  <div key={time} className="flex-1 flex flex-col items-center">
-                    <div className="w-px h-2 bg-border"></div>
-                    <span className="text-xs text-muted-foreground mt-1">{time}s</span>
-                  </div>
-                ))}
+            <div className="mt-4 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Timeline Markers</span>
+                <span className="text-xs text-muted-foreground">
+                  For precise audio alignment
+                </span>
+              </div>
+              <div className="h-8 bg-muted rounded border relative">
+                <div className="absolute inset-0 flex items-center px-2">
+                  {[0, 10, 20, 30, 40, 50, 60].map((time) => (
+                    <div
+                      key={time}
+                      className="flex-1 flex flex-col items-center"
+                    >
+                      <div className="w-px h-2 bg-border"></div>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        {time}s
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -146,11 +197,11 @@ export const MainArea: React.FC<MainAreaProps> = ({
                     <RotateCcw className="h-4 w-4" />
                   </Button>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -159,9 +210,9 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   <span className="text-sm font-medium w-12 text-center">
                     {Math.round(zoom * 100)}%
                   </span>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setZoom(Math.min(3, zoom + 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -176,7 +227,9 @@ export const MainArea: React.FC<MainAreaProps> = ({
                 <TimelineDropZone>
                   {timelineClips.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
-                      <div className="text-sm">Drop audio clips here to start building your timeline</div>
+                      <div className="text-sm">
+                        Drop audio clips here to start building your timeline
+                      </div>
                     </div>
                   ) : (
                     <div className="flex gap-2 flex-wrap">
@@ -194,17 +247,19 @@ export const MainArea: React.FC<MainAreaProps> = ({
                             <X className="h-3 w-3" />
                           </Button>
                           <div className="text-sm font-medium">{clip.name}</div>
-                          <div className="text-xs text-muted-foreground">{clip.duration}s</div>
-                          
+                          <div className="text-xs text-muted-foreground">
+                            {clip.duration}s
+                          </div>
+
                           {/* Mini waveform */}
                           <div className="flex items-end gap-px mt-2 h-4">
                             {clip.waveformData.map((height, waveIndex) => (
                               <div
                                 key={waveIndex}
                                 className="bg-primary w-1 rounded-sm"
-                                style={{ 
+                                style={{
                                   height: `${height * 100}%`,
-                                  transform: `scaleX(${zoom})`
+                                  transform: `scaleX(${zoom})`,
                                 }}
                               />
                             ))}
