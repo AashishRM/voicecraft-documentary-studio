@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { Input } from './ui/input';
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -16,13 +17,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle }) =>
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [projectName, setProjectName] = useState('Ocean Documentary');
 
   const projectInfo = {
-    name: 'Ocean Documentary',
     size: '2.4 GB',
     editor: 'John Doe',
     createdAt: '2024-01-15',
     lastModified: '2024-01-18'
+  };
+
+  const handleNameSave = () => {
+    setIsEditingName(false);
+  };
+
+  const handleNameCancel = () => {
+    setProjectName('Ocean Documentary'); // Reset to original
+    setIsEditingName(false);
   };
 
   if (!isOpen) {
@@ -74,9 +85,45 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle }) =>
             <CollapsibleContent>
               <CardContent className="pt-0 space-y-2">
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
+                  <div className="col-span-2">
                     <span className="text-muted-foreground">Name:</span>
-                    <p className="font-medium">{projectInfo.name}</p>
+                    {isEditingName ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input
+                          value={projectName}
+                          onChange={(e) => setProjectName(e.target.value)}
+                          className="h-6 text-xs"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleNameSave}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleNameCancel}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group">
+                        <p className="font-medium">{projectName}</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setIsEditingName(true)}
+                          className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Size:</span>
