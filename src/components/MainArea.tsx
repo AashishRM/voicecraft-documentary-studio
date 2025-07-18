@@ -39,6 +39,19 @@ export const MainArea: React.FC<MainAreaProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
+  const [selectedVideo, setSelectedVideo] = React.useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      setSelectedVideo(file);
+    }
+  };
+
+  const handleChooseVideoClick = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -68,14 +81,33 @@ export const MainArea: React.FC<MainAreaProps> = ({
         <Card>
           <CardContent className="p-6">
             <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-              <div className="text-center">
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-medium mb-2">Upload Video</h3>
-                <p className="text-muted-foreground mb-4">
-                  Drag and drop your video file here or click to browse
-                </p>
-                <Button>Choose Video File</Button>
-              </div>
+              {selectedVideo ? (
+                <div className="w-full h-full">
+                  <video
+                    className="w-full h-full object-contain rounded-lg"
+                    controls
+                    src={URL.createObjectURL(selectedVideo)}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-medium mb-2">Upload Video</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Drag and drop your video file here or click to browse
+                  </p>
+                  <Button onClick={handleChooseVideoClick}>Choose Video File</Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                  />
+                </div>
+              )}
             </div>
             
             {/* Timeline Markers */}
