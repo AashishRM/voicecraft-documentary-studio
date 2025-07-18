@@ -1,0 +1,179 @@
+import React, { useState } from 'react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot } from 'lucide-react';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader } from './ui/card';
+import { Textarea } from './ui/textarea';
+import { Badge } from './ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+
+interface LeftSidebarProps {
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle }) => {
+  const [projectInfoOpen, setProjectInfoOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('script');
+  const [scriptContent, setScriptContent] = useState('');
+
+  const projectInfo = {
+    name: 'Ocean Documentary',
+    size: '2.4 GB',
+    editor: 'John Doe',
+    createdAt: '2024-01-15',
+    lastModified: '2024-01-18'
+  };
+
+  if (!isOpen) {
+    return (
+      <div className="w-12 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="m-2 p-2 h-8 w-8"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-80 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
+      {/* Header with toggle */}
+      <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
+        <h2 className="text-lg font-semibold text-sidebar-foreground">Project</h2>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="p-2 h-8 w-8"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Project Info Box */}
+        <Collapsible open={projectInfoOpen} onOpenChange={setProjectInfoOpen}>
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer pb-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">Project Info</h3>
+                  {projectInfoOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0 space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Name:</span>
+                    <p className="font-medium">{projectInfo.name}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Size:</span>
+                    <p className="font-medium">{projectInfo.size}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Editor:</span>
+                    <p className="font-medium">{projectInfo.editor}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Created:</span>
+                    <p className="font-medium">{projectInfo.createdAt}</p>
+                  </div>
+                </div>
+                <div className="pt-1">
+                  <span className="text-muted-foreground text-xs">Last Modified:</span>
+                  <p className="font-medium text-xs">{projectInfo.lastModified}</p>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+
+        {/* Tabs Section */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="script" className="flex items-center gap-2">
+              <PenTool className="h-4 w-4" />
+              <span className="hidden sm:inline">Script</span>
+            </TabsTrigger>
+            <TabsTrigger value="ai" className="flex items-center gap-2">
+              <Bot className="h-4 w-4" />
+              <span className="hidden sm:inline">AI</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="script" className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">
+                Write or edit your script manually
+              </p>
+              <Textarea
+                placeholder="Enter your script here..."
+                value={scriptContent}
+                onChange={(e) => setScriptContent(e.target.value)}
+                className="min-h-32 resize-none"
+              />
+              <Button className="w-full mt-3">
+                Generate Voice
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai" className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-3">
+                Generate a script automatically
+              </p>
+              <Textarea
+                placeholder="Describe what you want the AI to write about..."
+                className="min-h-32 resize-none"
+              />
+              <Button className="w-full mt-3" variant="secondary">
+                Generate Script
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Audio Clip Preview */}
+        <Card>
+          <CardHeader>
+            <h3 className="text-sm font-medium">Generated Clips</h3>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {mockGeneratedClips.map((clip) => (
+                <div key={clip.id} className="flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{clip.name}</p>
+                    <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {clip.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+const mockGeneratedClips = [
+  { id: '1', name: 'Introduction', duration: 15.5, status: 'Ready' },
+  { id: '2', name: 'Chapter 1', duration: 32.1, status: 'Processing' },
+  { id: '3', name: 'Conclusion', duration: 12.3, status: 'Ready' }
+];

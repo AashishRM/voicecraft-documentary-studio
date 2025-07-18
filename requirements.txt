@@ -1,0 +1,39 @@
+# Documentary Voice-Over Tool Requirements
+
+## Prerequisites
+- Node.js (version 18.0 or higher)
+- npm or yarn package manager
+
+## Installation Steps
+1. Clone or download the project
+2. Navigate to the project directory
+3. Run: npm install
+4. Run: npm run dev
+
+## Key Dependencies Installed:
+- React 18.3.1
+- TypeScript
+- Vite (build tool)
+- Tailwind CSS (styling)
+- Radix UI components (accessible UI primitives)
+- Lucide React (icons)
+- @dnd-kit/* (drag and drop functionality)
+- React DnD (additional drag and drop support)
+- React Router DOM (routing)
+- Shadcn/UI components
+
+## Development Commands:
+- npm run dev - Start development server
+- npm run build - Build for production
+- npm run preview - Preview production build
+- npm run lint - Run ESLint
+
+## Browser Requirements:
+- Modern browser with ES6 support
+- Chrome, Firefox, Safari, Edge (latest versions)
+
+## Notes:
+- The app uses modern React hooks and TypeScript
+- All UI components are accessible and keyboard navigable
+- Drag and drop functionality requires modern browser APIs
+- Responsive design works on desktop, tablet, and mobile devices
