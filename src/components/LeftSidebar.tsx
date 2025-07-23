@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,7 +9,9 @@ import {
   Edit2,
   Check,
   X,
+  Music,
 } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Textarea } from "./ui/textarea";
@@ -25,33 +27,113 @@ import { Input } from "./ui/input";
 interface LeftSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+  selectedVideo?: File | null;
 }
+
+interface GeneratedClip {
+  id: string;
+  name: string;
+  duration: number;
+  status: string;
+}
+
+interface DraggableGeneratedClipProps {
+  clip: GeneratedClip;
+}
+
+const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({
+  clip,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: `generated-${clip.id}`,
+    });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
+        isDragging ? "opacity-50" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2 flex-1">
+        <Music className="h-4 w-4 text-muted-foreground" />
+        <div className="flex-1">
+          <p className="text-sm font-medium">{clip.name}</p>
+          <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+        </div>
+      </div>
+      <Badge variant="outline" className="text-xs">
+        {clip.status}
+      </Badge>
+    </div>
+  );
+};
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   isOpen,
   onToggle,
+  selectedVideo,
 }) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("script");
   const [scriptContent, setScriptContent] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
-  const [projectName, setProjectName] = useState("Ocean Documentary");
+  const [isEditingEditor, setIsEditingEditor] = useState(false);
+  const [projectName, setProjectName] = useState("Documentary Project");
+  const [editorName, setEditorName] = useState("John Doe");
+  const [createdAt] = useState(() => new Date().toISOString().split("T")[0]);
+  const [lastModified, setLastModified] = useState(
+    () => new Date().toISOString().split("T")[0]
+  );
 
-  const projectInfo = {
-    // name: 'Ocean Documentary',
-    size: "2.4 GB",
-    editor: "John Doe",
-    createdAt: "2024-01-15",
-    lastModified: "2024-01-18",
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   };
+
+  const fileSize = selectedVideo ? formatFileSize(selectedVideo.size) : "0 B";
+
+  useEffect(() => {
+    // Update last modified when script content changes
+    if (scriptContent) {
+      setLastModified(new Date().toISOString().split("T")[0]);
+    }
+  }, [scriptContent]);
+
+  useEffect(() => {
+    // Update last modified when project name changes
+    setLastModified(new Date().toISOString().split("T")[0]);
+  }, [projectName, editorName]);
 
   const handleNameSave = () => {
     setIsEditingName(false);
   };
 
   const handleNameCancel = () => {
-    setProjectName("Ocean Documentary"); // Reset to original
+    setProjectName("Documentary Project");
     setIsEditingName(false);
+  };
+
+  const handleEditorSave = () => {
+    setIsEditingEditor(false);
+  };
+
+  const handleEditorCancel = () => {
+    setEditorName("John Doe");
+    setIsEditingEditor(false);
   };
 
   if (!isOpen) {
@@ -147,24 +229,58 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   </div>
                   <div>
                     <span className="text-muted-foreground">Size:</span>
-                    <p className="font-medium">{projectInfo.size}</p>
+                    <p className="font-medium">{fileSize}</p>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <span className="text-muted-foreground">Editor:</span>
-                    <p className="font-medium">{projectInfo.editor}</p>
+                    {isEditingEditor ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Input
+                          value={editorName}
+                          onChange={(e) => setEditorName(e.target.value)}
+                          className="h-6 text-xs"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleEditorSave}
+                          className="h-6 w-6 p-0"
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleEditorCancel}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between group">
+                        <p className="font-medium">{editorName}</p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setIsEditingEditor(true)}
+                          className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span className="text-muted-foreground">Created:</span>
-                    <p className="font-medium">{projectInfo.createdAt}</p>
+                    <p className="font-medium">{createdAt}</p>
                   </div>
                 </div>
                 <div className="pt-1">
                   <span className="text-muted-foreground text-xs">
                     Last Modified:
                   </span>
-                  <p className="font-medium text-xs">
-                    {projectInfo.lastModified}
-                  </p>
+                  <p className="font-medium text-xs">{lastModified}</p>
                 </div>
               </CardContent>
             </CollapsibleContent>
@@ -223,20 +339,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {mockGeneratedClips.map((clip) => (
-                <div
-                  key={clip.id}
-                  className="flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{clip.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {clip.duration}s
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {clip.status}
-                  </Badge>
-                </div>
+                <DraggableGeneratedClip key={clip.id} clip={clip} />
               ))}
             </div>
           </CardContent>

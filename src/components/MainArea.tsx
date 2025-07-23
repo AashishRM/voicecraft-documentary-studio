@@ -22,6 +22,8 @@ interface MainAreaProps {
   onToggleRightSidebar: () => void;
   timelineClips: AudioClip[];
   onRemoveClip: (clipId: string) => void;
+  selectedVideo: File | null;
+  onVideoSelect: (file: File | null) => void;
 }
 
 const TimelineDropZone: React.FC<{ children: React.ReactNode }> = ({
@@ -50,16 +52,17 @@ export const MainArea: React.FC<MainAreaProps> = ({
   onToggleRightSidebar,
   timelineClips,
   onRemoveClip,
+  selectedVideo,
+  onVideoSelect,
 }) => {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
-  const [selectedVideo, setSelectedVideo] = React.useState<File | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type.startsWith("video/")) {
-      setSelectedVideo(file);
+      onVideoSelect(file);
     }
   };
 
@@ -110,7 +113,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => setSelectedVideo(null)}
+                      onClick={() => onVideoSelect(null)}
                       className="h-8 w-8 p-0"
                     >
                       <X className="h-4 w-4" />

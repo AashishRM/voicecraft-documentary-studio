@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Search, Music } from 'lucide-react';
-import { useDraggable } from '@dnd-kit/core';
-import { Button } from './ui/button';
-import { Card, CardContent, CardHeader } from './ui/card';
-import { Input } from './ui/input';
-import { AudioClip } from './DocumentaryStudio';
+import React, { useState, useRef } from "react";
+import { ChevronLeft, ChevronRight, Search, Music, Upload } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Input } from "./ui/input";
+import { AudioClip } from "./DocumentaryStudio";
 
 interface RightSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   audioClips: AudioClip[];
+  onAudioUpload: (files: FileList) => void;
 }
 
 interface DraggableAudioClipProps {
@@ -17,13 +18,16 @@ interface DraggableAudioClipProps {
 }
 
 const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: clip.id,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: clip.id,
+    });
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
 
   return (
     <div
@@ -32,7 +36,7 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
       {...listeners}
       {...attributes}
       className={`p-3 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
-        isDragging ? 'opacity-50' : ''
+        isDragging ? "opacity-50" : ""
       }`}
     >
       <div className="flex items-center gap-3">
@@ -42,7 +46,7 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{clip.name}</p>
           <p className="text-xs text-muted-foreground">{clip.duration}s</p>
-          
+
           {/* Waveform Preview */}
           <div className="flex items-end gap-px mt-2 h-8">
             {clip.waveformData.map((height, index) => (
@@ -59,10 +63,27 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
   );
 };
 
-export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, audioClips }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+export const RightSidebar: React.FC<RightSidebarProps> = ({
+  isOpen,
+  onToggle,
+  audioClips,
+  onAudioUpload,
+}) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredClips = audioClips.filter(clip =>
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      onAudioUpload(files);
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const filteredClips = audioClips.filter((clip) =>
     clip.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -85,7 +106,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, au
     <div className="w-80 h-full bg-sidebar border-l border-sidebar-border flex flex-col">
       {/* Header with toggle */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
-        <h2 className="text-lg font-semibold text-sidebar-foreground">Audio Library</h2>
+        <h2 className="text-lg font-semibold text-sidebar-foreground">
+          Audio Library
+        </h2>
         <Button
           variant="ghost"
           size="sm"
@@ -109,6 +132,20 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, au
             />
           </div>
         </div>
+
+        {/* Upload Button */}
+        <Button onClick={triggerFileUpload} className="w-full mb-4">
+          <Upload className="h-4 w-4 mr-2" />
+          Import Audio Files
+        </Button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          multiple
+          accept="audio/*"
+          className="hidden"
+        />
 
         {/* Audio Clip Library */}
         <Card>
