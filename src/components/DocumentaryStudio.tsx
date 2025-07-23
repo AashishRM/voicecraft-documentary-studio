@@ -16,6 +16,7 @@ export const DocumentaryStudio: React.FC = () => {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [timelineClips, setTimelineClips] = useState<AudioClip[]>([]);
   const [draggedClip, setDraggedClip] = useState<AudioClip | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
 
   const handleDragStart = (event: DragStartEvent) => {
     const clipId = event.active.id as string;
@@ -43,10 +44,11 @@ export const DocumentaryStudio: React.FC = () => {
       <div className="flex h-screen bg-background">
         {/* Left Sidebar */}
         <div className={`transition-all duration-300 ${leftSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
-          <LeftSidebar 
-            isOpen={leftSidebarOpen} 
-            onToggle={() => setLeftSidebarOpen(!leftSidebarOpen)} 
-          />
+        <LeftSidebar 
+          isOpen={leftSidebarOpen} 
+          onToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
+          selectedVideo={selectedVideo}
+        />
         </div>
 
         {/* Main Area */}
@@ -58,6 +60,8 @@ export const DocumentaryStudio: React.FC = () => {
             onToggleRightSidebar={() => setRightSidebarOpen(!rightSidebarOpen)}
             timelineClips={timelineClips}
             onRemoveClip={(clipId) => setTimelineClips(prev => prev.filter(c => c.id !== clipId))}
+            selectedVideo={selectedVideo}
+            onVideoSelect={setSelectedVideo}
           />
         </div>
 
