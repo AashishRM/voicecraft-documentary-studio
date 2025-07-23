@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Search, Music } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Search, Music, Upload } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -10,6 +10,7 @@ interface RightSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   audioClips: AudioClip[];
+  onAudioUpload: (files: FileList) => void;
 }
 
 interface DraggableAudioClipProps {
@@ -59,8 +60,20 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
   );
 };
 
-export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, audioClips }) => {
+export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, audioClips, onAudioUpload }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      onAudioUpload(files);
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
 
   const filteredClips = audioClips.filter(clip =>
     clip.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -109,6 +122,20 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, au
             />
           </div>
         </div>
+
+        {/* Upload Button */}
+        <Button onClick={triggerFileUpload} className="w-full mb-4">
+          <Upload className="h-4 w-4 mr-2" />
+          Import Audio Files
+        </Button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          multiple
+          accept="audio/*"
+          className="hidden"
+        />
 
         {/* Audio Clip Library */}
         <Card>

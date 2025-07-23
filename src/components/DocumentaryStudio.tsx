@@ -17,12 +17,33 @@ export const DocumentaryStudio: React.FC = () => {
   const [timelineClips, setTimelineClips] = useState<AudioClip[]>([]);
   const [draggedClip, setDraggedClip] = useState<AudioClip | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
+  const [uploadedAudioClips, setUploadedAudioClips] = useState<AudioClip[]>([]);
+
+  const allAudioClips = [...mockAudioClips, ...uploadedAudioClips];
 
   const handleDragStart = (event: DragStartEvent) => {
     const clipId = event.active.id as string;
-    const clip = mockAudioClips.find(c => c.id === clipId);
-    if (clip) {
-      setDraggedClip(clip);
+    
+    // Check if it's a generated clip
+    if (clipId.startsWith('generated-')) {
+      const actualId = clipId.replace('generated-', '');
+      const generatedClip = mockGeneratedClips.find(c => c.id === actualId);
+      if (generatedClip) {
+        // Convert generated clip to audio clip format
+        const audioClip: AudioClip = {
+          id: generatedClip.id,
+          name: generatedClip.name,
+          duration: generatedClip.duration,
+          waveformData: Array(10).fill(0).map(() => Math.random())
+        };
+        setDraggedClip(audioClip);
+      }
+    } else {
+      // Regular audio clip
+      const clip = allAudioClips.find(c => c.id === clipId);
+      if (clip) {
+        setDraggedClip(clip);
+      }
     }
   };
 
@@ -31,12 +52,47 @@ export const DocumentaryStudio: React.FC = () => {
     
     if (event.over && event.over.id === 'timeline') {
       const clipId = event.active.id as string;
-      const clip = mockAudioClips.find(c => c.id === clipId);
+      let clipToAdd: AudioClip | null = null;
       
-      if (clip && !timelineClips.find(c => c.id === clipId)) {
-        setTimelineClips(prev => [...prev, clip]);
+      // Check if it's a generated clip
+      if (clipId.startsWith('generated-')) {
+        const actualId = clipId.replace('generated-', '');
+        const generatedClip = mockGeneratedClips.find(c => c.id === actualId);
+        if (generatedClip) {
+          clipToAdd = {
+            id: generatedClip.id,
+            name: generatedClip.name,
+            duration: generatedClip.duration,
+            waveformData: Array(10).fill(0).map(() => Math.random())
+          };
+        }
+      } else {
+        // Regular audio clip
+        clipToAdd = allAudioClips.find(c => c.id === clipId) || null;
+      }
+      
+      if (clipToAdd && !timelineClips.find(c => c.id === clipToAdd!.id)) {
+        setTimelineClips(prev => [...prev, clipToAdd!]);
       }
     }
+  };
+
+  const handleAudioUpload = (files: FileList) => {
+    const newClips: AudioClip[] = [];
+    
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith('audio/')) {
+        const newClip: AudioClip = {
+          id: `uploaded-${Date.now()}-${Math.random()}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          duration: 0, // Would need audio analysis to get real duration
+          waveformData: Array(10).fill(0).map(() => Math.random())
+        };
+        newClips.push(newClip);
+      }
+    });
+    
+    setUploadedAudioClips(prev => [...prev, ...newClips]);
   };
 
   return (
@@ -70,7 +126,8 @@ export const DocumentaryStudio: React.FC = () => {
           <RightSidebar 
             isOpen={rightSidebarOpen} 
             onToggle={() => setRightSidebarOpen(!rightSidebarOpen)}
-            audioClips={mockAudioClips}
+            audioClips={allAudioClips}
+            onAudioUpload={handleAudioUpload}
           />
         </div>
 
@@ -114,4 +171,10 @@ const mockAudioClips: AudioClip[] = [
     duration: 45.7,
     waveformData: [0.5, 0.7, 0.6, 0.8, 0.4, 0.6, 0.7, 0.5, 0.3, 0.4]
   }
+];
+
+const mockGeneratedClips = [
+  { id: '1', name: 'Introduction', duration: 15.5, status: 'Ready' },
+  { id: '2', name: 'Chapter 1', duration: 32.1, status: 'Processing' },
+  { id: '3', name: 'Conclusion', duration: 12.3, status: 'Ready' }
 ];

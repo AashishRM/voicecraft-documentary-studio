@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X, Music } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Textarea } from './ui/textarea';
@@ -13,6 +14,50 @@ interface LeftSidebarProps {
   onToggle: () => void;
   selectedVideo?: File | null;
 }
+
+interface GeneratedClip {
+  id: string;
+  name: string;
+  duration: number;
+  status: string;
+}
+
+interface DraggableGeneratedClipProps {
+  clip: GeneratedClip;
+}
+
+const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `generated-${clip.id}`,
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
+        isDragging ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2 flex-1">
+        <Music className="h-4 w-4 text-muted-foreground" />
+        <div className="flex-1">
+          <p className="text-sm font-medium">{clip.name}</p>
+          <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+        </div>
+      </div>
+      <Badge variant="outline" className="text-xs">
+        {clip.status}
+      </Badge>
+    </div>
+  );
+};
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, selectedVideo }) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
@@ -266,15 +311,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {mockGeneratedClips.map((clip) => (
-                <div key={clip.id} className="flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{clip.name}</p>
-                    <p className="text-xs text-muted-foreground">{clip.duration}s</p>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {clip.status}
-                  </Badge>
-                </div>
+                <DraggableGeneratedClip key={clip.id} clip={clip} />
               ))}
             </div>
           </CardContent>
