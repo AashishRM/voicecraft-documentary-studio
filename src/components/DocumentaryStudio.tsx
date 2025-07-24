@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent } from '@dnd-kit/core';
+import { formatDuration } from '@/lib/timeUtils';
 import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { MainArea } from './MainArea';
@@ -9,6 +10,7 @@ export interface AudioClip {
   name: string;
   duration: number;
   waveformData: number[];
+  audioUrl?: string;
 }
 
 // Mock data for audio clips
@@ -124,7 +126,8 @@ export const DocumentaryStudio: React.FC = () => {
           id: `uploaded-${Date.now()}-${Math.random()}`,
           name: file.name.replace(/\.[^/.]+$/, ''),
           duration: duration,
-          waveformData: Array(10).fill(0).map(() => Math.random())
+          waveformData: Array(10).fill(0).map(() => Math.random()),
+          audioUrl: URL.createObjectURL(file)
         };
         newClips.push(newClip);
       }
@@ -191,7 +194,7 @@ export const DocumentaryStudio: React.FC = () => {
           {draggedClip && (
             <div className="bg-card border border-border rounded-lg p-3 shadow-lg opacity-90">
               <div className="text-sm font-medium">{draggedClip.name}</div>
-              <div className="text-xs text-muted-foreground">{draggedClip.duration}s</div>
+              <div className="text-xs text-muted-foreground">{formatDuration(draggedClip.duration)}</div>
             </div>
           )}
         </DragOverlay>

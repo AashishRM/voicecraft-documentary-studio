@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X, Music, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X, Music, Trash2, Play, Pause } from 'lucide-react';
+import { formatDuration } from '@/lib/timeUtils';
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -52,7 +53,7 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
         <Music className="h-4 w-4 text-muted-foreground" />
         <div className="flex-1">
           <p className="text-sm font-medium">{clip.name}</p>
-          <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+          <p className="text-xs text-muted-foreground">{formatDuration(clip.duration)}</p>
         </div>
       </div>
       <div className="flex items-center gap-1">

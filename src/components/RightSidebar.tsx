@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Search, Music, Upload, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Music, Upload, Trash2, Play, Pause } from 'lucide-react';
+import { formatDuration } from '@/lib/timeUtils';
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -22,6 +23,9 @@ interface DraggableAudioClipProps {
 }
 
 const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip, isUploaded = false, onDelete }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: clip.id,
   });
@@ -29,6 +33,28 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip, isUploade
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
+
+  const handlePlayPause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!clip.audioUrl) return;
+    
+    if (!audio) {
+      const newAudio = new Audio(clip.audioUrl);
+      newAudio.addEventListener('ended', () => setIsPlaying(false));
+      setAudio(newAudio);
+      newAudio.play();
+      setIsPlaying(true);
+    } else {
+      if (isPlaying) {
+        audio.pause();
+        setIsPlaying(false);
+      } else {
+        audio.play();
+        setIsPlaying(true);
+      }
+    }
+  };
 
   return (
     <div
@@ -46,7 +72,7 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip, isUploade
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{clip.name}</p>
-          <p className="text-xs text-muted-foreground">{clip.duration.toFixed(1)}s</p>
+          <p className="text-xs text-muted-foreground">{formatDuration(clip.duration)}</p>
           
           {/* Waveform Preview */}
           <div className="flex items-end gap-px mt-2 h-8">
@@ -59,19 +85,31 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip, isUploade
             ))}
           </div>
         </div>
-        {isUploaded && onDelete && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="p-1 h-6 w-6 text-destructive hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(clip.id);
-            }}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {clip.audioUrl && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="p-1 h-6 w-6"
+              onClick={handlePlayPause}
+            >
+              {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            </Button>
+          )}
+          {isUploaded && onDelete && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="p-1 h-6 w-6 text-destructive hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(clip.id);
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
