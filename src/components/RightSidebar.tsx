@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Search, Music, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Music, Upload, Trash2 } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -10,14 +10,18 @@ interface RightSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   audioClips: AudioClip[];
+  uploadedAudioClips: AudioClip[];
   onAudioUpload: (files: FileList) => void;
+  onDeleteUploadedClip: (clipId: string) => void;
 }
 
 interface DraggableAudioClipProps {
   clip: AudioClip;
+  isUploaded?: boolean;
+  onDelete?: (clipId: string) => void;
 }
 
-const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
+const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip, isUploaded = false, onDelete }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: clip.id,
   });
@@ -42,7 +46,7 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{clip.name}</p>
-          <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+          <p className="text-xs text-muted-foreground">{clip.duration.toFixed(1)}s</p>
           
           {/* Waveform Preview */}
           <div className="flex items-end gap-px mt-2 h-8">
@@ -55,12 +59,25 @@ const DraggableAudioClip: React.FC<DraggableAudioClipProps> = ({ clip }) => {
             ))}
           </div>
         </div>
+        {isUploaded && onDelete && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="p-1 h-6 w-6 text-destructive hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(clip.id);
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     </div>
   );
 };
 
-export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, audioClips, onAudioUpload }) => {
+export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, audioClips, uploadedAudioClips, onAudioUpload, onDeleteUploadedClip }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -150,9 +167,17 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ isOpen, onToggle, au
           <CardContent>
             <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto">
               {filteredClips.length > 0 ? (
-                filteredClips.map((clip) => (
-                  <DraggableAudioClip key={clip.id} clip={clip} />
-                ))
+                filteredClips.map((clip) => {
+                  const isUploaded = uploadedAudioClips.some(uc => uc.id === clip.id);
+                  return (
+                    <DraggableAudioClip 
+                      key={clip.id} 
+                      clip={clip} 
+                      isUploaded={isUploaded}
+                      onDelete={isUploaded ? onDeleteUploadedClip : undefined}
+                    />
+                  );
+                })
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Music className="h-8 w-8 mx-auto mb-2 opacity-50" />

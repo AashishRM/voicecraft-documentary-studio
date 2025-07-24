@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X, Music } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, PenTool, Bot, Edit2, Check, X, Music, Trash2 } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader } from './ui/card';
@@ -13,6 +13,8 @@ interface LeftSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   selectedVideo?: File | null;
+  generatedClips: GeneratedClip[];
+  onDeleteGeneratedClip: (clipId: string) => void;
 }
 
 interface GeneratedClip {
@@ -24,9 +26,10 @@ interface GeneratedClip {
 
 interface DraggableGeneratedClipProps {
   clip: GeneratedClip;
+  onDelete: (clipId: string) => void;
 }
 
-const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip }) => {
+const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, onDelete }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `generated-${clip.id}`,
   });
@@ -52,14 +55,27 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip })
           <p className="text-xs text-muted-foreground">{clip.duration}s</p>
         </div>
       </div>
-      <Badge variant="outline" className="text-xs">
-        {clip.status}
-      </Badge>
+      <div className="flex items-center gap-1">
+        <Badge variant="outline" className="text-xs">
+          {clip.status}
+        </Badge>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="p-1 h-6 w-6 text-destructive hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(clip.id);
+          }}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
     </div>
   );
 };
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, selectedVideo }) => {
+export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, selectedVideo, generatedClips, onDeleteGeneratedClip }) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
@@ -310,9 +326,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {mockGeneratedClips.map((clip) => (
-                <DraggableGeneratedClip key={clip.id} clip={clip} />
-              ))}
+              {generatedClips.length > 0 ? (
+                generatedClips.map((clip) => (
+                  <DraggableGeneratedClip 
+                    key={clip.id} 
+                    clip={clip} 
+                    onDelete={onDeleteGeneratedClip}
+                  />
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Music className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No clips generated yet</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -320,9 +347,3 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
     </div>
   );
 };
-
-const mockGeneratedClips = [
-  { id: '1', name: 'Introduction', duration: 15.5, status: 'Ready' },
-  { id: '2', name: 'Chapter 1', duration: 32.1, status: 'Processing' },
-  { id: '3', name: 'Conclusion', duration: 12.3, status: 'Ready' }
-];
