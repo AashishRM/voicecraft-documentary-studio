@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,12 +6,7 @@ import {
   ChevronUp,
   PenTool,
   Bot,
-  Edit2,
-  Check,
-  X,
-  Music,
 } from "lucide-react";
-import { useDraggable } from "@dnd-kit/core";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Textarea } from "./ui/textarea";
@@ -22,7 +17,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
-import { Input } from "./ui/input";
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -87,53 +81,22 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("script");
   const [scriptContent, setScriptContent] = useState("");
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [isEditingEditor, setIsEditingEditor] = useState(false);
-  const [projectName, setProjectName] = useState("Documentary Project");
-  const [editorName, setEditorName] = useState("John Doe");
-  const [createdAt] = useState(() => new Date().toISOString().split("T")[0]);
-  const [lastModified, setLastModified] = useState(
-    () => new Date().toISOString().split("T")[0]
-  );
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  const projectInfo = {
+    name: "Ocean Documentary",
+    size: "2.4 GB",
+    editor: "John Doe",
+    createdAt: "2024-01-15",
+    lastModified: "2024-01-18",
   };
-
-  const fileSize = selectedVideo ? formatFileSize(selectedVideo.size) : "0 B";
-
-  useEffect(() => {
-    // Update last modified when script content changes
-    if (scriptContent) {
-      setLastModified(new Date().toISOString().split("T")[0]);
-    }
-  }, [scriptContent]);
-
-  useEffect(() => {
-    // Update last modified when project name changes
-    setLastModified(new Date().toISOString().split("T")[0]);
-  }, [projectName, editorName]);
 
   const handleNameSave = () => {
     setIsEditingName(false);
   };
 
   const handleNameCancel = () => {
-    setProjectName("Documentary Project");
+    setProjectName("Ocean Documentary"); // Reset to original
     setIsEditingName(false);
-  };
-
-  const handleEditorSave = () => {
-    setIsEditingEditor(false);
-  };
-
-  const handleEditorCancel = () => {
-    setEditorName("John Doe");
-    setIsEditingEditor(false);
   };
 
   if (!isOpen) {
