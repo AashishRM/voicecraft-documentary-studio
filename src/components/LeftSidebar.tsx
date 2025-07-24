@@ -324,9 +324,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 placeholder="Describe what you want the AI to write about..."
                 className="min-h-32 resize-none"
               />
-              <Button className="w-full mt-3" variant="secondary">
-                Generate Script
-              </Button>
+              <Button className="w-full mt-3">Generate Script</Button>
             </div>
           </TabsContent>
         </Tabs>
