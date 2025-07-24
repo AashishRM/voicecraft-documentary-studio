@@ -5,6 +5,7 @@ import {
   DragOverlay,
   DragStartEvent,
 } from "@dnd-kit/core";
+import { formatDuration } from "@/lib/timeUtils";
 import { LeftSidebar } from "./LeftSidebar";
 import { RightSidebar } from "./RightSidebar";
 import { MainArea } from "./MainArea";
@@ -14,6 +15,7 @@ export interface AudioClip {
   name: string;
   duration: number;
   waveformData: number[];
+  audioUrl?: string;
 }
 
 export const DocumentaryStudio: React.FC = () => {
@@ -23,15 +25,18 @@ export const DocumentaryStudio: React.FC = () => {
   const [draggedClip, setDraggedClip] = useState<AudioClip | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [uploadedAudioClips, setUploadedAudioClips] = useState<AudioClip[]>([]);
+  const [generatedClips, setGeneratedClips] = useState(mockGeneratedClips);
 
   const allAudioClips = [...mockAudioClips, ...uploadedAudioClips];
 
   const handleDragStart = (event: DragStartEvent) => {
     const clipId = event.active.id as string;
+
     // Check if it's a generated clip
     if (clipId.startsWith("generated-")) {
       const actualId = clipId.replace("generated-", "");
-      const generatedClip = mockGeneratedClips.find((c) => c.id === actualId);
+      const generatedClip = generatedClips.find((c) => c.id === actualId);
+
       if (generatedClip) {
         // Convert generated clip to audio clip format
         const audioClip: AudioClip = {
@@ -63,7 +68,7 @@ export const DocumentaryStudio: React.FC = () => {
       // Check if it's a generated clip
       if (clipId.startsWith("generated-")) {
         const actualId = clipId.replace("generated-", "");
-        const generatedClip = mockGeneratedClips.find((c) => c.id === actualId);
+        const generatedClip = generatedClips.find((c) => c.id === actualId);
         if (generatedClip) {
           clipToAdd = {
             id: generatedClip.id,
@@ -85,24 +90,41 @@ export const DocumentaryStudio: React.FC = () => {
     }
   };
 
-  const handleAudioUpload = (files: FileList) => {
+  const handleAudioUpload = async (files: FileList) => {
     const newClips: AudioClip[] = [];
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
       if (file.type.startsWith("audio/")) {
+        // Get real audio duration
+        const duration = await getAudioDuration(file);
+
         const newClip: AudioClip = {
           id: `uploaded-${Date.now()}-${Math.random()}`,
           name: file.name.replace(/\.[^/.]+$/, ""),
-          duration: 0, // Would need audio analysis to get real duration
+          duration: duration,
           waveformData: Array(10)
             .fill(0)
             .map(() => Math.random()),
+          audioUrl: URL.createObjectURL(file),
         };
         newClips.push(newClip);
       }
-    });
+    }
 
     setUploadedAudioClips((prev) => [...prev, ...newClips]);
+  };
+
+  const getAudioDuration = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      audio.addEventListener("loadedmetadata", () => {
+        resolve(audio.duration);
+      });
+      audio.addEventListener("error", () => {
+        resolve(0); // Fallback if audio can't be loaded
+      });
+      audio.src = URL.createObjectURL(file);
+    });
   };
 
   return (
@@ -118,6 +140,10 @@ export const DocumentaryStudio: React.FC = () => {
             isOpen={leftSidebarOpen}
             onToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
             selectedVideo={selectedVideo}
+            generatedClips={generatedClips}
+            onDeleteGeneratedClip={(clipId) =>
+              setGeneratedClips((prev) => prev.filter((c) => c.id !== clipId))
+            }
           />
         </div>
 
@@ -147,7 +173,13 @@ export const DocumentaryStudio: React.FC = () => {
             isOpen={rightSidebarOpen}
             onToggle={() => setRightSidebarOpen(!rightSidebarOpen)}
             audioClips={allAudioClips}
+            uploadedAudioClips={uploadedAudioClips}
             onAudioUpload={handleAudioUpload}
+            onDeleteUploadedClip={(clipId) =>
+              setUploadedAudioClips((prev) =>
+                prev.filter((c) => c.id !== clipId)
+              )
+            }
           />
         </div>
 
@@ -157,7 +189,7 @@ export const DocumentaryStudio: React.FC = () => {
             <div className="bg-card border border-border rounded-lg p-3 shadow-lg opacity-90">
               <div className="text-sm font-medium">{draggedClip.name}</div>
               <div className="text-xs text-muted-foreground">
-                {draggedClip.duration}s
+                {formatDuration(draggedClip.duration)}
               </div>
             </div>
           )}

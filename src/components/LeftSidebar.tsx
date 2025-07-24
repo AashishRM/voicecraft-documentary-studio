@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,7 +6,16 @@ import {
   ChevronUp,
   PenTool,
   Bot,
+  Edit2,
+  Check,
+  X,
+  Music,
+  Trash2,
+  Play,
+  Pause,
 } from "lucide-react";
+import { formatDuration } from "@/lib/timeUtils";
+import { useDraggable } from "@dnd-kit/core";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Textarea } from "./ui/textarea";
@@ -17,11 +26,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
+import { Input } from "./ui/input";
 
 interface LeftSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   selectedVideo?: File | null;
+  generatedClips: GeneratedClip[];
+  onDeleteGeneratedClip: (clipId: string) => void;
 }
 
 interface GeneratedClip {
@@ -33,10 +45,12 @@ interface GeneratedClip {
 
 interface DraggableGeneratedClipProps {
   clip: GeneratedClip;
+  onDelete: (clipId: string) => void;
 }
 
 const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({
   clip,
+  onDelete,
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -63,12 +77,27 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({
         <Music className="h-4 w-4 text-muted-foreground" />
         <div className="flex-1">
           <p className="text-sm font-medium">{clip.name}</p>
-          <p className="text-xs text-muted-foreground">{clip.duration}s</p>
+          <p className="text-xs text-muted-foreground">
+            {formatDuration(clip.duration)}
+          </p>
         </div>
       </div>
-      <Badge variant="outline" className="text-xs">
-        {clip.status}
-      </Badge>
+      <div className="flex items-center gap-1">
+        <Badge variant="outline" className="text-xs">
+          {clip.status}
+        </Badge>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="p-1 h-6 w-6 text-destructive hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(clip.id);
+          }}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
     </div>
   );
 };
@@ -77,18 +106,42 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   isOpen,
   onToggle,
   selectedVideo,
+  generatedClips,
+  onDeleteGeneratedClip,
 }) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("script");
   const [scriptContent, setScriptContent] = useState("");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isEditingEditor, setIsEditingEditor] = useState(false);
+  const [projectName, setProjectName] = useState("Ocean Documentary");
+  const [editorName, setEditorName] = useState("John Doe");
+  const [createdAt] = useState(() => new Date().toISOString().split("T")[0]);
+  const [lastModified, setLastModified] = useState(
+    () => new Date().toISOString().split("T")[0]
+  );
 
-  const projectInfo = {
-    name: "Ocean Documentary",
-    size: "2.4 GB",
-    editor: "John Doe",
-    createdAt: "2024-01-15",
-    lastModified: "2024-01-18",
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   };
+
+  const fileSize = selectedVideo ? formatFileSize(selectedVideo.size) : "0 B";
+
+  useEffect(() => {
+    // Update last modified when script content changes
+    if (scriptContent) {
+      setLastModified(new Date().toISOString().split("T")[0]);
+    }
+  }, [scriptContent]);
+
+  useEffect(() => {
+    // Update last modified when project name changes
+    setLastModified(new Date().toISOString().split("T")[0]);
+  }, [projectName, editorName]);
 
   const handleNameSave = () => {
     setIsEditingName(false);
@@ -97,6 +150,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const handleNameCancel = () => {
     setProjectName("Ocean Documentary"); // Reset to original
     setIsEditingName(false);
+  };
+
+  const handleEditorSave = () => {
+    setIsEditingEditor(false);
+  };
+
+  const handleEditorCancel = () => {
+    setEditorName("John Doe");
+    setIsEditingEditor(false);
   };
 
   if (!isOpen) {
@@ -287,7 +349,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 placeholder="Describe what you want the AI to write about..."
                 className="min-h-32 resize-none"
               />
-              <Button className="w-full mt-3">Generate Script</Button>
+              <Button className="w-full mt-3" variant="secondary">
+                Generate Script
+              </Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -299,9 +363,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {mockGeneratedClips.map((clip) => (
-                <DraggableGeneratedClip key={clip.id} clip={clip} />
-              ))}
+              {generatedClips.length > 0 ? (
+                generatedClips.map((clip) => (
+                  <DraggableGeneratedClip
+                    key={clip.id}
+                    clip={clip}
+                    onDelete={onDeleteGeneratedClip}
+                  />
+                ))
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  <Music className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No clips generated yet</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -309,9 +384,3 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     </div>
   );
 };
-
-const mockGeneratedClips = [
-  { id: "1", name: "Introduction", duration: 15.5, status: "Ready" },
-  { id: "2", name: "Chapter 1", duration: 32.1, status: "Processing" },
-  { id: "3", name: "Conclusion", duration: 12.3, status: "Ready" },
-];
