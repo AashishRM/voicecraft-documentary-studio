@@ -9,6 +9,8 @@ import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { Input } from './ui/input';
+import { fdatasync } from 'fs';
+import { APISendMessage } from '@/api/message';
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -45,9 +47,8 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
       style={style}
       {...listeners}
       {...attributes}
-      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
-        isDragging ? 'opacity-50' : ''
-      }`}
+      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'opacity-50' : ''
+        }`}
     >
       <div className="flex items-center gap-2 flex-1">
         <Music className="h-4 w-4 text-muted-foreground" />
@@ -60,9 +61,9 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
         <Badge variant="outline" className="text-xs">
           {clip.status}
         </Badge>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           className="p-1 h-6 w-6 text-destructive hover:text-destructive"
           onClick={(e) => {
             e.stopPropagation();
@@ -80,12 +81,36 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingEditor, setIsEditingEditor] = useState(false);
   const [projectName, setProjectName] = useState('Ocean Documentary');
   const [editorName, setEditorName] = useState('John Doe');
   const [createdAt] = useState(() => new Date().toISOString().split('T')[0]);
   const [lastModified, setLastModified] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const sendMessage = async (values: { text: string }) => {
+    console.log("newMessage before trim:", newMessage, typeof newMessage);
+    if (!newMessage || !newMessage.toString().trim()) return;
+    const msgText = newMessage.toString().trim();
+    console.log(msgText);
+    console.log("22");
+    try {
+      const resSend = await APISendMessage({
+        text: msgText,
+      });
+      console.log("hello444");
+
+      setScriptContent((prev) => [...prev, resSend]);
+      setNewMessage(""); // clears input
+      console.log("hello");
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
+  };
+  console.log("messages state:", scriptContent);
+
+
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -294,11 +319,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
               </p>
               <Textarea
                 placeholder="Enter your script here..."
-                value={scriptContent}
-                onChange={(e) => setScriptContent(e.target.value)}
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
                 className="min-h-32 resize-none"
               />
-              <Button className="w-full mt-3">
+              <Button className="w-full mt-3" onClick={sendMessage}>
                 Generate Voice
               </Button>
             </div>
@@ -313,7 +339,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
                 placeholder="Describe what you want the AI to write about..."
                 className="min-h-32 resize-none"
               />
-              <Button className="w-full mt-3" variant="secondary">
+              <Button className="w-full mt-3" variant="secondary" >
                 Generate Script
               </Button>
             </div>
@@ -329,9 +355,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {generatedClips.length > 0 ? (
                 generatedClips.map((clip) => (
-                  <DraggableGeneratedClip 
-                    key={clip.id} 
-                    clip={clip} 
+                  <DraggableGeneratedClip
+                    key={clip.id}
+                    clip={clip}
                     onDelete={onDeleteGeneratedClip}
                   />
                 ))
