@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collap
 import { Input } from './ui/input';
 import { fdatasync } from 'fs';
 import { APISendMessage } from '@/api/message';
+import { APISendPrompt } from '@/api/prompt';
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -110,7 +111,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
       console.error("Failed to send message:", err);
     }
   };
-  console.log("messages state:", scriptContent);
+  // console.log("messages state:", scriptContent);
 
 
 
@@ -121,7 +122,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
     console.log(promptText);
     // console.log("22");
     try {
-      const resSend = await APISendMessage({
+      const resSend = await APISendPrompt({
         text: promptText,
       });
       // console.log("hello444");
@@ -133,7 +134,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
       console.error("Failed to send message:", err);
     }
   };
-  console.log("messages state:", promptContent);
+  // console.log("messages state:", promptContent);
 
 
 

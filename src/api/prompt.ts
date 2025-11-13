@@ -11,6 +11,6 @@ import { GetRequest, PostRequest } from "../plugins/https"
 // };
 
 
-export const APISendMessage = (body: { text: string }) => {
-  return PostRequest("message", body);
+export const APISendPrompt = (body: { text: string }) => {
+  return PostRequest("prompt", body);
 };
