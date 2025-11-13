@@ -81,7 +81,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
+  const [promptContent, setPromptContent] = useState('');
   const [newMessage, setNewMessage] = useState("");
+  const [newPrompt, setNewPrompt] = useState("");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingEditor, setIsEditingEditor] = useState(false);
   const [projectName, setProjectName] = useState('Ocean Documentary');
@@ -109,6 +111,29 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
     }
   };
   console.log("messages state:", scriptContent);
+
+
+
+  const sendPrompt = async (values: { text: string }) => {
+    console.log("newPrompt before trim:", newPrompt, typeof newPrompt);
+    if (!newPrompt || !newPrompt.toString().trim()) return;
+    const promptText = newPrompt.toString().trim();
+    console.log(promptText);
+    // console.log("22");
+    try {
+      const resSend = await APISendMessage({
+        text: promptText,
+      });
+      // console.log("hello444");
+
+      setPromptContent((prev) => [...prev, resSend]);
+      setNewPrompt(""); // clears input
+      console.log("hello");
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
+  };
+  console.log("messages state:", promptContent);
 
 
 
@@ -336,10 +361,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
                 Generate a script automatically
               </p>
               <Textarea
+                value={newPrompt}
+                onChange={(e) => setNewPrompt(e.target.value)}
                 placeholder="Describe what you want the AI to write about..."
                 className="min-h-32 resize-none"
               />
-              <Button className="w-full mt-3" variant="secondary" >
+              <Button className="w-full mt-3" variant="secondary" onClick={sendPrompt}>
                 Generate Script
               </Button>
             </div>
