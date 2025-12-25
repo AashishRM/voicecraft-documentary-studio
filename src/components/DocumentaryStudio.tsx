@@ -60,11 +60,11 @@ export const DocumentaryStudio: React.FC = () => {
 
   const handleDragStart = (event: DragStartEvent) => {
     const clipId = event.active.id as string;
-    
-      // Check if it's a generated clip
-      if (clipId.startsWith('generated-')) {
-        const actualId = clipId.replace('generated-', '');
-        const generatedClip = generatedClips.find(c => c.id === actualId);
+
+    // Check if it's a generated clip
+    if (clipId.startsWith('generated-')) {
+      const actualId = clipId.replace('generated-', '');
+      const generatedClip = generatedClips.find(c => c.id === actualId);
       if (generatedClip) {
         // Convert generated clip to audio clip format
         const audioClip: AudioClip = {
@@ -86,11 +86,11 @@ export const DocumentaryStudio: React.FC = () => {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggedClip(null);
-    
+
     if (event.over && event.over.id === 'timeline') {
       const clipId = event.active.id as string;
       let clipToAdd: AudioClip | null = null;
-      
+
       // Check if it's a generated clip
       if (clipId.startsWith('generated-')) {
         const actualId = clipId.replace('generated-', '');
@@ -107,7 +107,7 @@ export const DocumentaryStudio: React.FC = () => {
         // Regular audio clip
         clipToAdd = allAudioClips.find(c => c.id === clipId) || null;
       }
-      
+
       if (clipToAdd && !timelineClips.find(c => c.id === clipToAdd!.id)) {
         setTimelineClips(prev => [...prev, clipToAdd!]);
       }
@@ -116,12 +116,12 @@ export const DocumentaryStudio: React.FC = () => {
 
   const handleAudioUpload = async (files: FileList) => {
     const newClips: AudioClip[] = [];
-    
+
     for (const file of Array.from(files)) {
       if (file.type.startsWith('audio/')) {
         // Get real audio duration
         const duration = await getAudioDuration(file);
-        
+
         const newClip: AudioClip = {
           id: `uploaded-${Date.now()}-${Math.random()}`,
           name: file.name.replace(/\.[^/.]+$/, ''),
@@ -132,7 +132,7 @@ export const DocumentaryStudio: React.FC = () => {
         newClips.push(newClip);
       }
     }
-    
+
     setUploadedAudioClips(prev => [...prev, ...newClips]);
   };
 
@@ -154,18 +154,18 @@ export const DocumentaryStudio: React.FC = () => {
       <div className="flex h-screen bg-background">
         {/* Left Sidebar */}
         <div className={`transition-all duration-300 ${leftSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
-        <LeftSidebar 
-          isOpen={leftSidebarOpen} 
-          onToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
-          selectedVideo={selectedVideo}
-          generatedClips={generatedClips}
-          onDeleteGeneratedClip={(clipId) => setGeneratedClips(prev => prev.filter(c => c.id !== clipId))}
-        />
+          <LeftSidebar
+            isOpen={leftSidebarOpen}
+            onToggle={() => setLeftSidebarOpen(!leftSidebarOpen)}
+            selectedVideo={selectedVideo}
+            generatedClips={generatedClips}
+            onDeleteGeneratedClip={(clipId) => setGeneratedClips(prev => prev.filter(c => c.id !== clipId))}
+          />
         </div>
 
         {/* Main Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <MainArea 
+          <MainArea
             leftSidebarOpen={leftSidebarOpen}
             rightSidebarOpen={rightSidebarOpen}
             onToggleLeftSidebar={() => setLeftSidebarOpen(!leftSidebarOpen)}
@@ -179,8 +179,8 @@ export const DocumentaryStudio: React.FC = () => {
 
         {/* Right Sidebar */}
         <div className={`transition-all duration-300 ${rightSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
-          <RightSidebar 
-            isOpen={rightSidebarOpen} 
+          <RightSidebar
+            isOpen={rightSidebarOpen}
             onToggle={() => setRightSidebarOpen(!rightSidebarOpen)}
             audioClips={allAudioClips}
             uploadedAudioClips={uploadedAudioClips}

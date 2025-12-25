@@ -1,9 +1,12 @@
 import React from 'react';
-import { PanelLeftOpen, PanelRightOpen, Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, X } from 'lucide-react';
+import { PanelLeftOpen, PanelRightOpen, Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, X, Volume2, VolumeX } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { AudioClip } from './DocumentaryStudio';
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { formatDuration } from '@/lib/timeUtils';
+import { Slider } from './ui/slider';
 
 interface MainAreaProps {
   leftSidebarOpen: boolean;
@@ -41,9 +44,15 @@ export const MainArea: React.FC<MainAreaProps> = ({
   selectedVideo,
   onVideoSelect
 }) => {
-  const [isPlaying, setIsPlaying] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [currentPlayingClipIndex, setCurrentPlayingClipIndex] = React.useState(-1);
+
+  const audioPlayer = useAudioPlayer({
+    clips: timelineClips,
+    onClipChange: (index) => setCurrentPlayingClipIndex(index),
+    onComplete: () => setCurrentPlayingClipIndex(-1),
+  });
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -68,7 +77,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
           )}
           <h1 className="text-lg font-semibold">Documentary Voice-Over Studio</h1>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {!rightSidebarOpen && (
             <Button variant="ghost" size="sm" onClick={onToggleRightSidebar}>
@@ -132,7 +141,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
                 </div>
               )}
             </div>
-            
+
             {/* Timeline Markers */}
             <div className="mt-4 space-y-1">
               <div className="flex items-center justify-between">
@@ -162,24 +171,64 @@ export const MainArea: React.FC<MainAreaProps> = ({
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => setIsPlaying(!isPlaying)}
+                    onClick={audioPlayer.togglePlayPause}
                     className="h-8 w-8 p-0"
+                    disabled={timelineClips.filter(c => c.audioUrl).length === 0}
                   >
-                    {isPlaying ? (
+                    {audioPlayer.isPlaying ? (
                       <Pause className="h-4 w-4" />
                     ) : (
                       <Play className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={audioPlayer.reset}
+                    className="h-8 w-8 p-0"
+                  >
                     <RotateCcw className="h-4 w-4" />
                   </Button>
+
+                  {/* Playback status */}
+                  {timelineClips.length > 0 && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {audioPlayer.isPlaying ? (
+                        <>Playing: {timelineClips.filter(c => c.audioUrl)[audioPlayer.currentClipIndex]?.name || 'No audio'}</>
+                      ) : (
+                        <>Ready ({timelineClips.filter(c => c.audioUrl).length} playable clips)</>
+                      )}
+                    </span>
+                  )}
+
+                  {/* Volume control */}
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => audioPlayer.setVolume(audioPlayer.volume > 0 ? 0 : 1)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {audioPlayer.volume === 0 ? (
+                        <VolumeX className="h-4 w-4" />
+                      ) : (
+                        <Volume2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Slider
+                      value={[audioPlayer.volume * 100]}
+                      onValueChange={(value) => audioPlayer.setVolume(value[0] / 100)}
+                      max={100}
+                      step={1}
+                      className="w-24"
+                    />
+                  </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -188,9 +237,9 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   <span className="text-sm font-medium w-12 text-center">
                     {Math.round(zoom * 100)}%
                   </span>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => setZoom(Math.min(3, zoom + 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -209,37 +258,76 @@ export const MainArea: React.FC<MainAreaProps> = ({
                     </div>
                   ) : (
                     <div className="flex gap-2 flex-wrap">
-                      {timelineClips.map((clip, index) => (
-                        <div
-                          key={`${clip.id}-${index}`}
-                          className="bg-primary/20 border border-primary/30 rounded-lg p-3 min-w-32 group relative"
-                        >
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onRemoveClip(clip.id)}
-                            className="absolute -top-2 -right-2 h-6 w-6 p-0 bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      {timelineClips.map((clip, index) => {
+                        const playableClips = timelineClips.filter(c => c.audioUrl);
+                        const playableIndex = playableClips.findIndex(c => c.id === clip.id);
+                        const isCurrentlyPlaying = audioPlayer.isPlaying && playableIndex === audioPlayer.currentClipIndex;
+                        const hasAudio = !!clip.audioUrl;
+
+                        return (
+                          <div
+                            key={`${clip.id}-${index}`}
+                            onClick={() => {
+                              if (hasAudio && playableIndex !== -1) {
+                                audioPlayer.seekToClip(playableIndex);
+                                if (!audioPlayer.isPlaying) {
+                                  audioPlayer.play();
+                                }
+                              }
+                            }}
+                            className={`rounded-lg p-3 min-w-32 group relative cursor-pointer transition-all ${isCurrentlyPlaying
+                                ? 'bg-primary/40 border-2 border-primary ring-2 ring-primary/30'
+                                : hasAudio
+                                  ? 'bg-primary/20 border border-primary/30 hover:bg-primary/30'
+                                  : 'bg-muted/50 border border-border opacity-60'
+                              }`}
                           >
-                            <X className="h-3 w-3" />
-                          </Button>
-                          <div className="text-sm font-medium">{clip.name}</div>
-                          <div className="text-xs text-muted-foreground">{clip.duration}s</div>
-                          
-                          {/* Mini waveform */}
-                          <div className="flex items-end gap-px mt-2 h-4">
-                            {clip.waveformData.map((height, waveIndex) => (
-                              <div
-                                key={waveIndex}
-                                className="bg-primary w-1 rounded-sm"
-                                style={{ 
-                                  height: `${height * 100}%`,
-                                  transform: `scaleX(${zoom})`
-                                }}
-                              />
-                            ))}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRemoveClip(clip.id);
+                              }}
+                              className="absolute -top-2 -right-2 h-6 w-6 p-0 bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+
+                            <div className="flex items-center gap-2">
+                              {isCurrentlyPlaying && (
+                                <div className="flex items-center gap-0.5">
+                                  <div className="w-1 h-3 bg-primary animate-pulse rounded-full" />
+                                  <div className="w-1 h-4 bg-primary animate-pulse rounded-full" style={{ animationDelay: '0.1s' }} />
+                                  <div className="w-1 h-2 bg-primary animate-pulse rounded-full" style={{ animationDelay: '0.2s' }} />
+                                </div>
+                              )}
+                              {!hasAudio && !isCurrentlyPlaying && (
+                                <span className="text-xs text-muted-foreground">(no audio)</span>
+                              )}
+                              <div className="flex-1">
+                                <div className="text-sm font-medium">{clip.name}</div>
+                                <div className="text-xs text-muted-foreground">{formatDuration(clip.duration)}</div>
+                              </div>
+                            </div>
+
+                            {/* Mini waveform */}
+                            <div className="flex items-end gap-px mt-2 h-4">
+                              {clip.waveformData.map((height, waveIndex) => (
+                                <div
+                                  key={waveIndex}
+                                  className={`w-1 rounded-sm transition-colors ${isCurrentlyPlaying ? 'bg-primary' : 'bg-primary/60'
+                                    }`}
+                                  style={{
+                                    height: `${height * 100}%`,
+                                    transform: `scaleX(${zoom})`
+                                  }}
+                                />
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </TimelineDropZone>
