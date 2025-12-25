@@ -13,6 +13,14 @@ export interface AudioClip {
   audioUrl?: string;
 }
 
+interface GeneratedClip {
+  id: string;
+  name: string;
+  duration: number;
+  status: string;
+  audioUrl?: string;
+}
+
 // Mock data for audio clips
 const mockAudioClips: AudioClip[] = [
   {
@@ -23,12 +31,6 @@ const mockAudioClips: AudioClip[] = [
   }
 ];
 
-const mockGeneratedClips = [
-  { id: '1', name: 'Introduction', duration: 15.5, status: 'Ready' },
-  { id: '2', name: 'Chapter 1', duration: 32.1, status: 'Processing' },
-  { id: '3', name: 'Conclusion', duration: 12.3, status: 'Ready' }
-];
-
 export const DocumentaryStudio: React.FC = () => {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
@@ -36,9 +38,13 @@ export const DocumentaryStudio: React.FC = () => {
   const [draggedClip, setDraggedClip] = useState<AudioClip | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null);
   const [uploadedAudioClips, setUploadedAudioClips] = useState<AudioClip[]>([]);
-  const [generatedClips, setGeneratedClips] = useState(mockGeneratedClips);
+  const [generatedClips, setGeneratedClips] = useState<GeneratedClip[]>([]);
 
   const allAudioClips = [...mockAudioClips, ...uploadedAudioClips];
+
+  const handleAddGeneratedClip = (clip: GeneratedClip) => {
+    setGeneratedClips(prev => [...prev, clip]);
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     const clipId = event.active.id as string;
@@ -53,7 +59,8 @@ export const DocumentaryStudio: React.FC = () => {
           id: generatedClip.id,
           name: generatedClip.name,
           duration: generatedClip.duration,
-          waveformData: Array(10).fill(0).map(() => Math.random())
+          waveformData: Array(10).fill(0).map(() => Math.random()),
+          audioUrl: generatedClip.audioUrl
         };
         setDraggedClip(audioClip);
       }
@@ -82,7 +89,8 @@ export const DocumentaryStudio: React.FC = () => {
             id: generatedClip.id,
             name: generatedClip.name,
             duration: generatedClip.duration,
-            waveformData: Array(10).fill(0).map(() => Math.random())
+            waveformData: Array(10).fill(0).map(() => Math.random()),
+            audioUrl: generatedClip.audioUrl
           };
         }
       } else {
@@ -142,6 +150,7 @@ export const DocumentaryStudio: React.FC = () => {
             selectedVideo={selectedVideo}
             generatedClips={generatedClips}
             onDeleteGeneratedClip={(clipId) => setGeneratedClips(prev => prev.filter(c => c.id !== clipId))}
+            onAddGeneratedClip={handleAddGeneratedClip}
           />
         </div>
 

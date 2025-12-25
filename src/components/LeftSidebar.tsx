@@ -9,7 +9,6 @@ import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { Input } from './ui/input';
-import { fdatasync } from 'fs';
 import { APISendMessage } from '@/api/message';
 import { APISendPrompt } from '@/api/prompt';
 
@@ -19,6 +18,7 @@ interface LeftSidebarProps {
   selectedVideo?: File | null;
   generatedClips: GeneratedClip[];
   onDeleteGeneratedClip: (clipId: string) => void;
+  onAddGeneratedClip: (clip: GeneratedClip) => void;
 }
 
 interface GeneratedClip {
@@ -26,6 +26,7 @@ interface GeneratedClip {
   name: string;
   duration: number;
   status: string;
+  audioUrl?: string;
 }
 
 interface DraggableGeneratedClipProps {
@@ -34,6 +35,35 @@ interface DraggableGeneratedClipProps {
 }
 
 const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, onDelete }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (clip.audioUrl) {
+      const audioElement = new Audio(clip.audioUrl);
+      audioElement.addEventListener('ended', () => setIsPlaying(false));
+      setAudio(audioElement);
+      
+      return () => {
+        audioElement.pause();
+        audioElement.src = '';
+      };
+    }
+  }, [clip.audioUrl]);
+
+  const togglePlayback = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play();
+      setIsPlaying(true);
+    }
+  };
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `generated-${clip.id}`,
   });
@@ -48,8 +78,9 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
       style={style}
       {...listeners}
       {...attributes}
-      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'opacity-50' : ''
-        }`}
+      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
+        isDragging ? 'opacity-50' : ''
+      }`}
     >
       <div className="flex items-center gap-2 flex-1">
         <Music className="h-4 w-4 text-muted-foreground" />
@@ -62,6 +93,20 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
         <Badge variant="outline" className="text-xs">
           {clip.status}
         </Badge>
+        {clip.audioUrl && clip.status === 'Ready' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-1 h-6 w-6"
+            onClick={togglePlayback}
+          >
+            {isPlaying ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -78,13 +123,21 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
   );
 };
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, selectedVideo, generatedClips, onDeleteGeneratedClip }) => {
+export const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
+  isOpen, 
+  onToggle, 
+  selectedVideo, 
+  generatedClips, 
+  onDeleteGeneratedClip,
+  onAddGeneratedClip 
+}) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
   const [promptContent, setPromptContent] = useState('');
   const [newMessage, setNewMessage] = useState("");
   const [newPrompt, setNewPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingEditor, setIsEditingEditor] = useState(false);
   const [projectName, setProjectName] = useState('Ocean Documentary');
@@ -92,51 +145,80 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
   const [createdAt] = useState(() => new Date().toISOString().split('T')[0]);
   const [lastModified, setLastModified] = useState(() => new Date().toISOString().split('T')[0]);
 
-  const sendMessage = async (values: { text: string }) => {
-    console.log("newMessage before trim:", newMessage, typeof newMessage);
-    if (!newMessage || !newMessage.toString().trim()) return;
-    const msgText = newMessage.toString().trim();
-    console.log(msgText);
-    console.log("22");
-    try {
-      const resSend = await APISendMessage({
-        text: msgText,
+  const getAudioDuration = (audioBlob: Blob): Promise<number> => {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const url = URL.createObjectURL(audioBlob);
+      
+      audio.addEventListener('loadedmetadata', () => {
+        resolve(audio.duration);
+        URL.revokeObjectURL(url);
       });
-      console.log("hello444");
+      
+      audio.addEventListener('error', () => {
+        resolve(0);
+        URL.revokeObjectURL(url);
+      });
+      
+      audio.src = url;
+    });
+  };
 
-      setScriptContent((prev) => [...prev, resSend]);
-      setNewMessage(""); // clears input
-      console.log("hello");
+  const sendMessage = async () => {
+    const msgText = newMessage?.toString().trim();
+    if (!msgText) return;
+
+    setIsGenerating(true);
+    
+    try {
+      const audioBlob = await APISendMessage({ text: msgText });
+      
+      // Get duration from the audio blob
+      const duration = await getAudioDuration(audioBlob);
+      
+      // Create object URL for the audio blob
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      // Create new generated clip
+      const newClip: GeneratedClip = {
+        id: `clip-${Date.now()}`,
+        name: msgText.substring(0, 30) + (msgText.length > 30 ? '...' : ''),
+        duration: duration,
+        status: 'Ready',
+        audioUrl: audioUrl
+      };
+      console.log("22");
+      onAddGeneratedClip(newClip);
+      setScriptContent(prev => prev + msgText + '\n\n');
+      setNewMessage("");
     } catch (err) {
-      console.error("Failed to send message:", err);
+      console.error("Failed to generate voice:", err);
+      alert("Failed to generate voice. Please try again.");
+    } finally {
+      setIsGenerating(false);
     }
   };
-  // console.log("messages state:", scriptContent);
 
+  const sendPrompt = async () => {
+    const promptText = newPrompt?.toString().trim();
+    if (!promptText) return;
 
-
-  const sendPrompt = async (values: { text: string }) => {
-    console.log("newPrompt before trim:", newPrompt, typeof newPrompt);
-    if (!newPrompt || !newPrompt.toString().trim()) return;
-    const promptText = newPrompt.toString().trim();
-    console.log(promptText);
-    // console.log("22");
+    setIsGenerating(true);
+    
     try {
-      const resSend = await APISendPrompt({
-        text: promptText,
-      });
-      // console.log("hello444");
-
-      setPromptContent((prev) => [...prev, resSend]);
-      setNewPrompt(""); // clears input
-      console.log("hello");
+      const response = await APISendPrompt({ text: promptText });
+      
+      setPromptContent(prev => prev + response + '\n\n');
+      setNewMessage(response); // Populate script tab with generated text
+      setNewPrompt("");
+      setActiveTab('script'); // Switch to script tab
     } catch (err) {
-      console.error("Failed to send message:", err);
+      console.error("Failed to generate script:", err);
+      alert("Failed to generate script. Please try again.");
+    } finally {
+      setIsGenerating(false);
     }
   };
-  // console.log("messages state:", promptContent);
-
-
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -149,14 +231,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
   const fileSize = selectedVideo ? formatFileSize(selectedVideo.size) : '0 B';
 
   useEffect(() => {
-    // Update last modified when script content changes
     if (scriptContent) {
       setLastModified(new Date().toISOString().split('T')[0]);
     }
   }, [scriptContent]);
 
   useEffect(() => {
-    // Update last modified when project name changes
     setLastModified(new Date().toISOString().split('T')[0]);
   }, [projectName, editorName]);
 
@@ -195,7 +275,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
 
   return (
     <div className="w-80 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
-      {/* Header with toggle */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         <h2 className="text-lg font-semibold text-sidebar-foreground">Project</h2>
         <Button
@@ -209,7 +288,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Project Info Box */}
         <Collapsible open={projectInfoOpen} onOpenChange={setProjectInfoOpen}>
           <Card>
             <CollapsibleTrigger asChild>
@@ -325,7 +403,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
           </Card>
         </Collapsible>
 
-        {/* Tabs Section */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="script" className="flex items-center gap-2">
@@ -347,11 +424,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
                 placeholder="Enter your script here..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
                 className="min-h-32 resize-none"
+                disabled={isGenerating}
               />
-              <Button className="w-full mt-3" onClick={sendMessage}>
-                Generate Voice
+              <Button 
+                className="w-full mt-3" 
+                onClick={sendMessage}
+                disabled={isGenerating || !newMessage.trim()}
+              >
+                {isGenerating ? 'Generating...' : 'Generate Voice'}
               </Button>
             </div>
           </TabsContent>
@@ -366,15 +453,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, sele
                 onChange={(e) => setNewPrompt(e.target.value)}
                 placeholder="Describe what you want the AI to write about..."
                 className="min-h-32 resize-none"
+                disabled={isGenerating}
               />
-              <Button className="w-full mt-3" variant="secondary" onClick={sendPrompt}>
-                Generate Script
+              <Button 
+                className="w-full mt-3" 
+                variant="secondary" 
+                onClick={sendPrompt}
+                disabled={isGenerating || !newPrompt.trim()}
+              >
+                {isGenerating ? 'Generating...' : 'Generate Script'}
               </Button>
             </div>
           </TabsContent>
         </Tabs>
 
-        {/* Audio Clip Preview */}
         <Card>
           <CardHeader>
             <h3 className="text-sm font-medium">Generated Clips</h3>
