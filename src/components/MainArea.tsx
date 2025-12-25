@@ -1,12 +1,15 @@
-import React from 'react';
-import { PanelLeftOpen, PanelRightOpen, Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, X, Volume2, VolumeX } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { PanelLeftOpen, PanelRightOpen, Upload, Play, Pause, RotateCcw, ZoomIn, ZoomOut, X, Volume2, VolumeX, Download, Loader2 } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { AudioClip } from './DocumentaryStudio';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useVideoExport } from '@/hooks/useVideoExport';
 import { formatDuration } from '@/lib/timeUtils';
 import { Slider } from './ui/slider';
+import { Progress } from './ui/progress';
+import { useToast } from '@/hooks/use-toast';
 
 interface MainAreaProps {
   leftSidebarOpen: boolean;
@@ -44,15 +47,59 @@ export const MainArea: React.FC<MainAreaProps> = ({
   selectedVideo,
   onVideoSelect
 }) => {
-  const [zoom, setZoom] = React.useState(1);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [currentPlayingClipIndex, setCurrentPlayingClipIndex] = React.useState(-1);
+  const [zoom, setZoom] = useState(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentPlayingClipIndex, setCurrentPlayingClipIndex] = useState(-1);
+  const [videoSyncEnabled, setVideoSyncEnabled] = useState(true);
+  const { toast } = useToast();
 
   const audioPlayer = useAudioPlayer({
     clips: timelineClips,
     onClipChange: (index) => setCurrentPlayingClipIndex(index),
     onComplete: () => setCurrentPlayingClipIndex(-1),
   });
+
+  const videoExport = useVideoExport({
+    videoFile: selectedVideo,
+    audioClips: timelineClips,
+  });
+
+  // Sync video with audio playback
+  useEffect(() => {
+    if (!videoRef.current || !selectedVideo || !videoSyncEnabled) return;
+
+    const video = videoRef.current;
+    
+    if (audioPlayer.isPlaying) {
+      video.currentTime = audioPlayer.globalTime;
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+      video.currentTime = audioPlayer.globalTime;
+    }
+  }, [audioPlayer.isPlaying, audioPlayer.globalTime, selectedVideo, videoSyncEnabled]);
+
+  // Show export error
+  useEffect(() => {
+    if (videoExport.exportError) {
+      toast({
+        title: "Export Error",
+        description: videoExport.exportError,
+        variant: "destructive",
+      });
+    }
+  }, [videoExport.exportError, toast]);
+
+  // Show export success
+  useEffect(() => {
+    if (videoExport.exportProgress === 100 && !videoExport.isExporting) {
+      toast({
+        title: "Export Complete",
+        description: "Your video has been exported successfully!",
+      });
+    }
+  }, [videoExport.exportProgress, videoExport.isExporting, toast]);
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -77,7 +124,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
           )}
           <h1 className="text-lg font-semibold">Documentary Voice-Over Studio</h1>
         </div>
-
+        
         <div className="flex items-center gap-2">
           {!rightSidebarOpen && (
             <Button variant="ghost" size="sm" onClick={onToggleRightSidebar}>
@@ -92,17 +139,18 @@ export const MainArea: React.FC<MainAreaProps> = ({
         {/* Video Preview */}
         <Card>
           <CardContent className="p-6">
-            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed border-border overflow-hidden">
               {selectedVideo ? (
                 <div className="w-full h-full relative group">
                   <video
+                    ref={videoRef}
                     className="w-full h-full object-contain rounded-lg"
-                    controls
                     src={URL.createObjectURL(selectedVideo)}
+                    muted
                   >
                     Your browser does not support the video tag.
                   </video>
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                     <Button
                       size="sm"
                       variant="destructive"
@@ -120,6 +168,17 @@ export const MainArea: React.FC<MainAreaProps> = ({
                       className="bg-background/80 backdrop-blur-sm"
                     >
                       Change Video
+                    </Button>
+                  </div>
+                  {/* Sync indicator */}
+                  <div className="absolute top-2 left-2">
+                    <Button
+                      size="sm"
+                      variant={videoSyncEnabled ? "default" : "outline"}
+                      onClick={() => setVideoSyncEnabled(!videoSyncEnabled)}
+                      className="h-7 text-xs"
+                    >
+                      {videoSyncEnabled ? "Synced" : "Unsync"}
                     </Button>
                   </div>
                 </div>
@@ -141,24 +200,68 @@ export const MainArea: React.FC<MainAreaProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Timeline Markers */}
-            <div className="mt-4 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Timeline Markers</span>
-                <span className="text-xs text-muted-foreground">For precise audio alignment</span>
-              </div>
-              <div className="h-8 bg-muted rounded border relative">
-                <div className="absolute inset-0 flex items-center px-2">
-                  {[0, 10, 20, 30, 40, 50, 60].map((time) => (
-                    <div key={time} className="flex-1 flex flex-col items-center">
-                      <div className="w-px h-2 bg-border"></div>
-                      <span className="text-xs text-muted-foreground mt-1">{time}s</span>
-                    </div>
-                  ))}
+            
+            {/* Playback Progress Bar */}
+            {timelineClips.filter(c => c.audioUrl).length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{formatDuration(audioPlayer.globalTime)}</span>
+                  <span>{formatDuration(audioPlayer.totalDuration)}</span>
                 </div>
+                <Slider
+                  value={[audioPlayer.globalTime]}
+                  onValueChange={(value) => audioPlayer.seekToTime(value[0])}
+                  max={audioPlayer.totalDuration || 1}
+                  step={0.1}
+                  className="w-full"
+                />
               </div>
-            </div>
+            )}
+
+            {/* Export Section */}
+            {selectedVideo && timelineClips.filter(c => c.audioUrl).length > 0 && (
+              <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium">Export Video</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Combine video with audio timeline and download
+                    </p>
+                  </div>
+                  <Button
+                    onClick={videoExport.isExporting ? videoExport.cancelExport : videoExport.exportVideo}
+                    disabled={false}
+                    variant={videoExport.isExporting ? "outline" : "default"}
+                    size="sm"
+                  >
+                    {videoExport.isExporting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Cancel
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {videoExport.isExporting && (
+                  <div className="mt-3 space-y-1">
+                    <Progress value={videoExport.exportProgress} className="h-2" />
+                    <p className="text-xs text-muted-foreground text-center">
+                      {videoExport.exportProgress < 20 
+                        ? "Preparing audio..." 
+                        : videoExport.exportProgress < 95 
+                          ? "Rendering video..." 
+                          : "Finalizing..."}
+                      {" "}{videoExport.exportProgress}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -181,15 +284,15 @@ export const MainArea: React.FC<MainAreaProps> = ({
                       <Play className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
                     onClick={audioPlayer.reset}
                     className="h-8 w-8 p-0"
                   >
                     <RotateCcw className="h-4 w-4" />
                   </Button>
-
+                  
                   {/* Playback status */}
                   {timelineClips.length > 0 && (
                     <span className="text-xs text-muted-foreground ml-2">
@@ -200,7 +303,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
                       )}
                     </span>
                   )}
-
+                  
                   {/* Volume control */}
                   <div className="flex items-center gap-2 ml-4">
                     <Button
@@ -224,11 +327,11 @@ export const MainArea: React.FC<MainAreaProps> = ({
                     />
                   </div>
                 </div>
-
+                
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
                     onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -237,9 +340,9 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   <span className="text-sm font-medium w-12 text-center">
                     {Math.round(zoom * 100)}%
                   </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
                     onClick={() => setZoom(Math.min(3, zoom + 0.25))}
                     className="h-8 w-8 p-0"
                   >
@@ -263,7 +366,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
                         const playableIndex = playableClips.findIndex(c => c.id === clip.id);
                         const isCurrentlyPlaying = audioPlayer.isPlaying && playableIndex === audioPlayer.currentClipIndex;
                         const hasAudio = !!clip.audioUrl;
-
+                        
                         return (
                           <div
                             key={`${clip.id}-${index}`}
@@ -275,12 +378,13 @@ export const MainArea: React.FC<MainAreaProps> = ({
                                 }
                               }
                             }}
-                            className={`rounded-lg p-3 min-w-32 group relative cursor-pointer transition-all ${isCurrentlyPlaying
-                                ? 'bg-primary/40 border-2 border-primary ring-2 ring-primary/30'
+                            className={`rounded-lg p-3 min-w-32 group relative cursor-pointer transition-all ${
+                              isCurrentlyPlaying 
+                                ? 'bg-primary/40 border-2 border-primary ring-2 ring-primary/30' 
                                 : hasAudio
                                   ? 'bg-primary/20 border border-primary/30 hover:bg-primary/30'
                                   : 'bg-muted/50 border border-border opacity-60'
-                              }`}
+                            }`}
                           >
                             <Button
                               size="sm"
@@ -293,7 +397,7 @@ export const MainArea: React.FC<MainAreaProps> = ({
                             >
                               <X className="h-3 w-3" />
                             </Button>
-
+                            
                             <div className="flex items-center gap-2">
                               {isCurrentlyPlaying && (
                                 <div className="flex items-center gap-0.5">
@@ -310,15 +414,16 @@ export const MainArea: React.FC<MainAreaProps> = ({
                                 <div className="text-xs text-muted-foreground">{formatDuration(clip.duration)}</div>
                               </div>
                             </div>
-
+                            
                             {/* Mini waveform */}
                             <div className="flex items-end gap-px mt-2 h-4">
                               {clip.waveformData.map((height, waveIndex) => (
                                 <div
                                   key={waveIndex}
-                                  className={`w-1 rounded-sm transition-colors ${isCurrentlyPlaying ? 'bg-primary' : 'bg-primary/60'
-                                    }`}
-                                  style={{
+                                  className={`w-1 rounded-sm transition-colors ${
+                                    isCurrentlyPlaying ? 'bg-primary' : 'bg-primary/60'
+                                  }`}
+                                  style={{ 
                                     height: `${height * 100}%`,
                                     transform: `scaleX(${zoom})`
                                   }}

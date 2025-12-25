@@ -13,12 +13,14 @@ interface UseAudioPlayerReturn {
   currentTime: number;
   totalDuration: number;
   volume: number;
+  globalTime: number;
   play: () => void;
   pause: () => void;
   reset: () => void;
   togglePlayPause: () => void;
   seekToClip: (index: number) => void;
   setVolume: (volume: number) => void;
+  seekToTime: (time: number) => void;
 }
 
 export const useAudioPlayer = ({ 
@@ -30,9 +32,19 @@ export const useAudioPlayer = ({
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolumeState] = useState(1);
+  const [globalTime, setGlobalTime] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<number | null>(null);
+
+  // Get clips that have audio URLs
+  const playableClips = clips.filter(clip => clip.audioUrl);
+
+  // Calculate cumulative durations for global time tracking
+  const clipStartTimes = playableClips.reduce<number[]>((acc, clip, index) => {
+    if (index === 0) return [0];
+    return [...acc, acc[index - 1] + playableClips[index - 1].duration];
+  }, [0]);
 
   const setVolume = useCallback((newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, newVolume));
@@ -43,9 +55,7 @@ export const useAudioPlayer = ({
   }, []);
 
   const totalDuration = clips.reduce((acc, clip) => acc + clip.duration, 0);
-
-  // Get clips that have audio URLs
-  const playableClips = clips.filter(clip => clip.audioUrl);
+  const playableDuration = playableClips.reduce((acc, clip) => acc + clip.duration, 0);
 
   const clearTimeInterval = useCallback(() => {
     if (intervalRef.current) {
@@ -58,10 +68,14 @@ export const useAudioPlayer = ({
     clearTimeInterval();
     intervalRef.current = window.setInterval(() => {
       if (audioRef.current) {
-        setCurrentTime(audioRef.current.currentTime);
+        const clipTime = audioRef.current.currentTime;
+        setCurrentTime(clipTime);
+        // Calculate global time based on current clip position
+        const clipStart = clipStartTimes[currentClipIndex] || 0;
+        setGlobalTime(clipStart + clipTime);
       }
     }, 100);
-  }, [clearTimeInterval]);
+  }, [clearTimeInterval, clipStartTimes, currentClipIndex]);
 
   const playCurrentClip = useCallback(() => {
     if (playableClips.length === 0) {
@@ -148,8 +162,68 @@ export const useAudioPlayer = ({
     setIsPlaying(false);
     setCurrentClipIndex(0);
     setCurrentTime(0);
+    setGlobalTime(0);
     clearTimeInterval();
   }, [clearTimeInterval]);
+
+  const seekToTime = useCallback((time: number) => {
+    // Find which clip this time falls into
+    let targetClipIndex = 0;
+    let accumulatedTime = 0;
+    
+    for (let i = 0; i < playableClips.length; i++) {
+      if (accumulatedTime + playableClips[i].duration > time) {
+        targetClipIndex = i;
+        break;
+      }
+      accumulatedTime += playableClips[i].duration;
+      if (i === playableClips.length - 1) {
+        targetClipIndex = i;
+      }
+    }
+
+    const timeInClip = time - accumulatedTime;
+    const wasPlaying = isPlaying;
+    
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    
+    setCurrentClipIndex(targetClipIndex);
+    setGlobalTime(time);
+    onClipChange?.(targetClipIndex);
+    
+    // Create new audio and seek to position
+    const clip = playableClips[targetClipIndex];
+    if (clip?.audioUrl) {
+      const audio = new Audio(clip.audioUrl);
+      audio.volume = volume;
+      audio.currentTime = Math.max(0, Math.min(timeInClip, clip.duration));
+      audioRef.current = audio;
+      setCurrentTime(audio.currentTime);
+      
+      audio.addEventListener('ended', () => {
+        if (targetClipIndex < playableClips.length - 1) {
+          setCurrentClipIndex(prev => prev + 1);
+          onClipChange?.(targetClipIndex + 1);
+        } else {
+          setIsPlaying(false);
+          setCurrentClipIndex(0);
+          setCurrentTime(0);
+          setGlobalTime(0);
+          clearTimeInterval();
+          onComplete?.();
+        }
+      });
+      
+      if (wasPlaying) {
+        audio.play().then(() => {
+          setIsPlaying(true);
+          startTimeTracking();
+        });
+      }
+    }
+  }, [playableClips, isPlaying, volume, onClipChange, onComplete, clearTimeInterval, startTimeTracking]);
 
   const togglePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -207,11 +281,13 @@ export const useAudioPlayer = ({
     currentTime,
     totalDuration,
     volume,
+    globalTime,
     play,
     pause,
     reset,
     togglePlayPause,
     seekToClip,
     setVolume,
+    seekToTime,
   };
 };

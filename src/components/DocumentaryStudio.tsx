@@ -17,27 +17,9 @@ export interface AudioClip {
 const mockAudioClips: AudioClip[] = [
   {
     id: '1',
-    name: 'Narrator Intro',
+    name: 'Background Music Sample',
     duration: 15.5,
     waveformData: [0.2, 0.4, 0.8, 0.6, 0.3, 0.7, 0.5, 0.9, 0.4, 0.2]
-  },
-  {
-    id: '2',
-    name: 'Chapter 1',
-    duration: 32.1,
-    waveformData: [0.3, 0.6, 0.4, 0.8, 0.5, 0.7, 0.6, 0.4, 0.8, 0.3]
-  },
-  {
-    id: '3',
-    name: 'Background Music',
-    duration: 120.0,
-    waveformData: [0.1, 0.2, 0.3, 0.2, 0.4, 0.3, 0.2, 0.1, 0.2, 0.3]
-  },
-  {
-    id: '4',
-    name: 'Interview Clip',
-    duration: 45.7,
-    waveformData: [0.5, 0.7, 0.6, 0.8, 0.4, 0.6, 0.7, 0.5, 0.3, 0.4]
   }
 ];
 
