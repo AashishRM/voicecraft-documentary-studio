@@ -3,11 +3,16 @@ import { useState, useRef, useCallback } from 'react';
 interface AudioClip {
   name: string;
   audioUrl?: string;
+  videoUrl?: string; // Video file URL for video clips
+  duration: number;
+  trackIndex?: number;
+  trackVolume?: number;
 }
 
 interface UseVideoExportProps {
   videoFile: File | null;
   audioClips: AudioClip[];
+  getTrackVolume?: (trackIndex: number) => number; // Function to get current track volume from player
 }
 
 interface UseVideoExportReturn {
@@ -21,6 +26,7 @@ interface UseVideoExportReturn {
 export const useVideoExport = ({
   videoFile,
   audioClips,
+  getTrackVolume,
 }: UseVideoExportProps): UseVideoExportReturn => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -51,7 +57,8 @@ export const useVideoExport = ({
       return;
     }
 
-    const playableClips = audioClips.filter(clip => clip.audioUrl);
+    // Filter clips that have audio (either audioUrl or videoUrl)
+    const playableClips = audioClips.filter(clip => clip.audioUrl || clip.videoUrl);
     if (playableClips.length === 0) {
       setExportError('No audio clips with audio to export');
       return;
@@ -95,52 +102,162 @@ export const useVideoExport = ({
 
       // Create audio context and merge audio clips
       audioContext = new AudioContext();
-      const audioBuffers: AudioBuffer[] = [];
+      
+      // Group clips by track
+      const clipsByTrack = new Map<number, typeof playableClips>();
+      playableClips.forEach(clip => {
+        const trackIndex = clip.trackIndex ?? 0;
+        if (!clipsByTrack.has(trackIndex)) {
+          clipsByTrack.set(trackIndex, []);
+        }
+        clipsByTrack.get(trackIndex)!.push(clip);
+      });
 
-      for (let i = 0; i < playableClips.length; i++) {
-        if (cancelledRef.current) return;
-        
-        const clip = playableClips[i];
-        if (clip.audioUrl) {
-          try {
-            const response = await fetch(clip.audioUrl);
-            const arrayBuffer = await response.arrayBuffer();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            audioBuffers.push(audioBuffer);
-          } catch (err) {
-            console.warn(`Failed to decode audio for clip ${clip.name}:`, err);
+      // Load all audio buffers for each track (including video clips)
+      const trackBuffers = new Map<number, AudioBuffer[]>();
+      let totalClips = 0;
+      let loadedClips = 0;
+
+      for (const [trackIndex, trackClips] of clipsByTrack.entries()) {
+        const buffers: AudioBuffer[] = [];
+        for (const clip of trackClips) {
+          // Use audioUrl if available, otherwise use videoUrl (video files contain audio)
+          const audioSource = clip.audioUrl || clip.videoUrl;
+          if (audioSource) {
+            totalClips++;
+            try {
+              const response = await fetch(audioSource);
+              const arrayBuffer = await response.arrayBuffer();
+              const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+              buffers.push(audioBuffer);
+              loadedClips++;
+              setExportProgress(Math.round((loadedClips / totalClips) * 15));
+            } catch (err) {
+              console.warn(`Failed to decode audio for clip ${clip.name}:`, err);
+            }
           }
         }
-        
-        setExportProgress(Math.round((i / playableClips.length) * 20));
+        if (buffers.length > 0) {
+          trackBuffers.set(trackIndex, buffers);
+        }
       }
 
-      if (audioBuffers.length === 0) {
+      if (trackBuffers.size === 0) {
         throw new Error('No audio could be decoded');
       }
 
-      // Calculate total audio duration
-      const totalAudioDuration = audioBuffers.reduce((sum, buf) => sum + buf.duration, 0);
-      const exportDuration = Math.min(videoElement.duration, totalAudioDuration);
+      // Merge clips within each track (sequential)
+      const mergedTrackBuffers = new Map<number, AudioBuffer>();
+      for (const [trackIndex, buffers] of trackBuffers.entries()) {
+        if (buffers.length === 0) continue;
+        
+        const sampleRate = buffers[0].sampleRate;
+        const totalDuration = buffers.reduce((sum, buf) => sum + buf.duration, 0);
+        const totalLength = Math.ceil(totalDuration * sampleRate);
+        const mergedBuffer = audioContext.createBuffer(
+          buffers[0].numberOfChannels,
+          totalLength,
+          sampleRate
+        );
 
-      // Merge audio buffers
-      const sampleRate = audioBuffers[0].sampleRate;
-      const totalLength = Math.ceil(totalAudioDuration * sampleRate);
-      const mergedBuffer = audioContext.createBuffer(
-        audioBuffers[0].numberOfChannels,
+        let offset = 0;
+        for (const buffer of buffers) {
+          for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const channelData = mergedBuffer.getChannelData(channel);
+            const sourceData = buffer.getChannelData(channel);
+            channelData.set(sourceData, offset);
+          }
+          offset += buffer.length;
+        }
+        
+        mergedTrackBuffers.set(trackIndex, mergedBuffer);
+      }
+
+      // Mix all tracks together (simultaneous playback) with volume control
+      const sortedTrackIndices = Array.from(mergedTrackBuffers.keys()).sort((a, b) => a - b);
+      const allTracks = sortedTrackIndices.map(trackIndex => mergedTrackBuffers.get(trackIndex)!);
+      
+      if (allTracks.length === 0) {
+        throw new Error('No audio tracks to merge');
+      }
+      
+      const maxDuration = Math.max(...allTracks.map(buf => buf.duration));
+      const sampleRate = allTracks[0].sampleRate;
+      const numberOfChannels = Math.max(...allTracks.map(buf => buf.numberOfChannels));
+      const totalLength = Math.ceil(maxDuration * sampleRate);
+      
+      const finalMergedBuffer = audioContext.createBuffer(
+        numberOfChannels,
         totalLength,
         sampleRate
       );
 
-      let offset = 0;
-      for (const buffer of audioBuffers) {
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-          const channelData = mergedBuffer.getChannelData(channel);
-          const sourceData = buffer.getChannelData(channel);
-          channelData.set(sourceData, offset);
-        }
-        offset += buffer.length;
+      // Get track volumes - use getTrackVolume function if provided, or fall back to clip trackVolume
+      const trackVolumesMap = new Map<number, number>();
+      
+      // First, get volumes for all tracks that exist in clipsByTrack (this ensures we get all tracks)
+      if (getTrackVolume) {
+        clipsByTrack.forEach((_, trackIndex) => {
+          const volume = getTrackVolume(trackIndex);
+          trackVolumesMap.set(trackIndex, volume);
+        });
+      } else {
+        // Fallback: get volumes from clips
+        audioClips.forEach(clip => {
+          if (clip.trackIndex !== undefined && !trackVolumesMap.has(clip.trackIndex)) {
+            const volume = clip.trackVolume ?? 1.0;
+            trackVolumesMap.set(clip.trackIndex, volume);
+          }
+        });
       }
+
+      // Mix all tracks with volume control, maintaining track order
+      sortedTrackIndices.forEach((trackIndex, arrayIndex) => {
+        const trackBuffer = allTracks[arrayIndex];
+        const volume = trackVolumesMap.get(trackIndex) ?? 1.0;
+        
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+          const finalChannelData = finalMergedBuffer.getChannelData(channel);
+          const trackChannelData = trackBuffer.getChannelData(
+            Math.min(channel, trackBuffer.numberOfChannels - 1)
+          );
+          
+          for (let i = 0; i < Math.min(trackBuffer.length, totalLength); i++) {
+            finalChannelData[i] += trackChannelData[i] * volume;
+          }
+        }
+      });
+
+      // Normalize to prevent clipping while preserving relative volume differences
+      // Only normalize if the signal exceeds 1.0, and do it proportionally
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const channelData = finalMergedBuffer.getChannelData(channel);
+        let max = 0;
+        for (let i = 0; i < channelData.length; i++) {
+          max = Math.max(max, Math.abs(channelData[i]));
+        }
+        // Only normalize if we exceed 1.0 (to prevent clipping)
+        // This preserves relative volume differences between tracks
+        if (max > 1.0) {
+          const normalizeFactor = 1.0 / max;
+          for (let i = 0; i < channelData.length; i++) {
+            channelData[i] *= normalizeFactor;
+          }
+        }
+      }
+
+      // Calculate export duration to match timeline player
+      // Timeline player uses: max of all track durations (where each track duration = sum of clip durations)
+      const trackDurations = Array.from(clipsByTrack.values()).map(trackClips => 
+        trackClips.reduce((sum, clip) => sum + clip.duration, 0)
+      );
+      const timelineTotalDuration = trackDurations.length > 0 ? Math.max(...trackDurations) : 0;
+      
+      // Use the timeline duration (max track duration) as the export duration
+      // This ensures the exported video matches exactly what plays in the timeline
+      const totalAudioDuration = Math.max(maxDuration, timelineTotalDuration);
+      const exportDuration = videoFile ? Math.min(videoElement.duration, totalAudioDuration) : totalAudioDuration;
+      const mergedBuffer = finalMergedBuffer;
 
       // Create audio destination
       const dest = audioContext.createMediaStreamDestination();
@@ -199,6 +316,7 @@ export const useVideoExport = ({
 
       // Reset video and play
       videoElement.currentTime = 0;
+      videoElement.loop = exportDuration > videoElement.duration; // Loop if audio is longer than video
       await videoElement.play();
 
       // Render frames synchronized with video playback
@@ -224,15 +342,19 @@ export const useVideoExport = ({
         setExportProgress(Math.min(progress, 95));
 
         // Draw current video frame
+        // If video has looped, reset it to the correct position
+        if (videoElement!.loop && videoElement!.currentTime >= videoElement!.duration) {
+          videoElement!.currentTime = 0;
+        }
         ctx.drawImage(videoElement!, 0, 0, canvas.width, canvas.height);
 
         frameCount++;
 
-        // Continue if we haven't reached the end
-        if (elapsed < exportDuration && !videoElement!.ended && !videoElement!.paused) {
+        // Continue if we haven't reached the export duration (matching timeline duration)
+        if (elapsed < exportDuration) {
           animationFrameId = requestAnimationFrame(render);
         } else {
-          // Finish recording
+          // Finish recording - stop at exact export duration to match timeline
           videoElement!.pause();
           bufferSource.stop();
           
@@ -298,7 +420,7 @@ export const useVideoExport = ({
       
       cleanupRef.current = [];
     }
-  }, [videoFile, audioClips]);
+  }, [videoFile, audioClips, getTrackVolume]);
 
   return {
     isExporting,
