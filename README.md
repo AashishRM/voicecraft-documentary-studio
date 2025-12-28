@@ -10,25 +10,25 @@ The project also includes a **chatbot** that generates Nepali Devanagari scripts
 
 ##  Features
 
--  **Nepali Devanagari Text-to-Speech (TTS)**
+- **Nepali Devanagari Text-to-Speech (TTS)**
   - Convert Nepali Devanagari text into AI/ML-generated speech
   - High-quality, natural-sounding audio output
 
--  **Audio–Video Syncing**
+- **Audio–Video Syncing**
   - Upload video clips
   - Sync generated Nepali speech with video timelines
   - Export final audio/video output
 
--  **Built-in Media Editor**
+- **Built-in Media Editor**
   - Timeline-based editor (similar to a video editor)
   - Import and manage multiple audio tracks
   - Adjust timing, layering, and alignment of media
 
--  **Nepali Script Generator Chatbot**
+- **Nepali Script Generator Chatbot**
   - Generate Nepali Devanagari scripts from a description prompt
   - Useful for narration, storytelling, and content creation
 
--  **Modern, Responsive UI**
+- **Modern, Responsive UI**
   - Clean and accessible interface
   - Optimized for fast performance
 
@@ -58,10 +58,7 @@ This project is built with:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/your-repo-name.git
-
-# Navigate to the project directory
-cd your-repo-name
+git clone https://github.com/MajorProject-Frontend.git
 
 # Install dependencies
 npm install
