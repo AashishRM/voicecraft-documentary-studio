@@ -1,74 +1,67 @@
-# Welcome to your Lovable project
+# 🇳🇵 Nepali Text to Speech  
 
-## Project info
+An AI-powered web application that transforms **Nepali Devanagari text** into **natural-sounding speech**, syncs it with video clips, and provides a **video-editor–like interface** for complete multimedia creation.  
+The project also includes a **chatbot** that generates Nepali Devanagari scripts from user-provided prompts.
 
-**URL**: https://lovable.dev/projects/aafed800-9a4d-42b4-b71a-4d75de62d3be
+> Example input:  
+> **देश बनाउन घण्टी बजाउनु पर्छ**
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+##  Features
 
-**Use Lovable**
+- **Nepali Devanagari Text-to-Speech (TTS)**
+  - Convert Nepali Devanagari text into AI/ML-generated speech
+  - High-quality, natural-sounding audio output
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/aafed800-9a4d-42b4-b71a-4d75de62d3be) and start prompting.
+- **Audio–Video Syncing**
+  - Upload video clips
+  - Sync generated Nepali speech with video timelines
+  - Export final audio/video output
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Built-in Media Editor**
+  - Timeline-based editor (similar to a video editor)
+  - Import and manage multiple audio tracks
+  - Adjust timing, layering, and alignment of media
 
-**Use your preferred IDE**
+- **Nepali Script Generator Chatbot**
+  - Generate Nepali Devanagari scripts from a description prompt
+  - Useful for narration, storytelling, and content creation
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **Modern, Responsive UI**
+  - Clean and accessible interface
+  - Optimized for fast performance
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
---!>
+---
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
+##  Tech Stack
 
 This project is built with:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+-  **Vite** – Fast development and build tooling
+-  **TypeScript** – Type-safe JavaScript
+-  **React** – Component-based UI framework
+-  **shadcn/ui** – Accessible and customizable UI components
+-  **Tailwind CSS** – Utility-first styling
+-  **AI / ML Models** – For Nepali text-to-speech and script generation
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/aafed800-9a4d-42b4-b71a-4d75de62d3be) and click on Share -> Publish.
+##  Getting Started
 
-## Can I connect a custom domain to my Lovable project?
+### Prerequisites
 
-Yes, you can!
+- Node.js (>= 18 recommended)
+- npm / pnpm / yarn
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Installation
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+```bash
+# Clone the repository
+git clone https://github.com/MajorProject-Frontend.git
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
