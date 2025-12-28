@@ -4,7 +4,7 @@ An AI-powered web application that transforms **Nepali Devanagari text** into **
 The project also includes a **chatbot** that generates Nepali Devanagari scripts from user-provided prompts.
 
 > Example input:  
-> **देश बनाउन घण्टी बजाउनु पर्छ |**
+> **देश बनाउन घण्टी बजाउनु पर्छ**
 
 ---
 
