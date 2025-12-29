@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { Input } from './ui/input';
 import { APISendMessage } from '@/api/message';
-import { APISendPrompt } from '@/api/prompt';
+import { APIChatWithHuggingFace } from '@/api/chatbot';
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -134,10 +134,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
   const [scriptContent, setScriptContent] = useState('');
-  const [promptContent, setPromptContent] = useState('');
   const [newMessage, setNewMessage] = useState("");
-  const [newPrompt, setNewPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [huggingFaceApiKey, setHuggingFaceApiKey] = useState<string>("");
+  const chatMessagesEndRef = React.useRef<HTMLDivElement>(null);
+  const lastRequestTimeRef = React.useRef<number>(0);
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditingEditor, setIsEditingEditor] = useState(false);
   const [projectName, setProjectName] = useState('Ocean Documentary');
@@ -199,26 +203,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     }
   };
 
-  const sendPrompt = async () => {
-    const promptText = newPrompt?.toString().trim();
-    if (!promptText) return;
-
-    setIsGenerating(true);
-    
-    try {
-      const response = await APISendPrompt({ text: promptText });
-      
-      setPromptContent(prev => prev + response + '\n\n');
-      setNewMessage(response); // Populate script tab with generated text
-      setNewPrompt("");
-      setActiveTab('script'); // Switch to script tab
-    } catch (err) {
-      console.error("Failed to generate script:", err);
-      alert("Failed to generate script. Please try again.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -239,6 +223,76 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   useEffect(() => {
     setLastModified(new Date().toISOString().split('T')[0]);
   }, [projectName, editorName]);
+
+  // Load Hugging Face API key from environment variable or localStorage on mount
+  useEffect(() => {
+    const apiKey = 
+      import.meta.env.VITE_HUGGINGFACE_API_KEY || 
+      localStorage.getItem('huggingface_api_key') || 
+      '';
+    setHuggingFaceApiKey(apiKey);
+  }, []);
+
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, isChatLoading]);
+
+  const sendChatMessage = async () => {
+    const messageText = chatInput.trim();
+    if (!messageText) return;
+
+    // Rate limiting: Prevent requests faster than once per 2 seconds
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTimeRef.current;
+    const minDelay = 2000; // 2 seconds between requests
+    
+    if (timeSinceLastRequest < minDelay && lastRequestTimeRef.current > 0) {
+      const waitTime = Math.ceil((minDelay - timeSinceLastRequest) / 1000);
+      alert(`Please wait ${waitTime} more second(s) before sending another message to avoid rate limits.`);
+      return;
+    }
+
+    // Get API key from state, environment variable, or localStorage
+    const apiKey = 
+      huggingFaceApiKey || 
+      import.meta.env.VITE_HUGGINGFACE_API_KEY || 
+      localStorage.getItem('huggingface_api_key') || 
+      '';
+
+    if (!apiKey) {
+      alert("Please set your Hugging Face API key:\n1. Add VITE_HUGGINGFACE_API_KEY to your .env file, or\n2. Set it in localStorage as 'huggingface_api_key'");
+      return;
+    }
+
+    // Update last request time
+    lastRequestTimeRef.current = now;
+
+    // Add user message to chat
+    const userMessage = { role: 'user' as const, content: messageText };
+    const updatedMessages = [...chatMessages, userMessage];
+    setChatMessages(updatedMessages);
+    setChatInput("");
+    setIsChatLoading(true);
+
+    try {
+      // Get response from Hugging Face
+      const response = await APIChatWithHuggingFace(updatedMessages, apiKey);
+      
+      // Add assistant response to chat
+      const assistantMessage = { role: 'assistant' as const, content: response };
+      setChatMessages([...updatedMessages, assistantMessage]);
+    } catch (error: any) {
+      console.error("Chatbot error:", error);
+      const errorMessage = { 
+        role: 'assistant' as const, 
+        content: `त्रुटि: ${error.message || 'च्याटबटबाट प्रतिक्रिया प्राप्त गर्न असफल भयो।'}` 
+      };
+      setChatMessages([...updatedMessages, errorMessage]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
 
   const handleNameSave = () => {
     setIsEditingName(false);
@@ -446,23 +500,83 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <TabsContent value="ai" className="space-y-4">
             <div>
               <p className="text-sm text-muted-foreground mb-3">
-                Generate a script automatically
+                Chat with AI - Get elaborate responses in Devanagari Nepali
               </p>
-              <Textarea
-                value={newPrompt}
-                onChange={(e) => setNewPrompt(e.target.value)}
-                placeholder="Describe what you want the AI to write about..."
-                className="min-h-32 resize-none"
-                disabled={isGenerating}
-              />
-              <Button 
-                className="w-full mt-3" 
-                variant="secondary" 
-                onClick={sendPrompt}
-                disabled={isGenerating || !newPrompt.trim()}
-              >
-                {isGenerating ? 'Generating...' : 'Generate Script'}
-              </Button>
+              
+              {/* Chat Messages Display */}
+              <div className="border rounded-lg p-3 mb-3 bg-background min-h-[200px] max-h-[300px] overflow-y-auto space-y-3">
+                {chatMessages.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Start a conversation with the chatbot...
+                  </p>
+                ) : (
+                  chatMessages.map((msg, index) => (
+                    <div
+                      key={index}
+                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[80%] rounded-lg p-2 text-sm ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isChatLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted rounded-lg p-2 text-sm text-muted-foreground">
+                      <p>प्रतिक्रिया आउँदैछ...</p>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatMessagesEndRef} />
+              </div>
+
+              {/* Chat Input */}
+              <div className="space-y-2">
+                <Textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type your message here in English"
+                  className="min-h-24 resize-none"
+                  disabled={isChatLoading}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendChatMessage();
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <Button 
+                    className="flex-1" 
+                    variant="secondary" 
+                    onClick={sendChatMessage}
+                    disabled={isChatLoading || !chatInput.trim() || !(huggingFaceApiKey || import.meta.env.VITE_HUGGINGFACE_API_KEY)}
+                  >
+                    {isChatLoading ? 'प्रतिक्रिया आउँदैछ...' : 'Send the prompt'}
+                  </Button>
+                  {chatMessages.length > 0 && (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setChatMessages([])}
+                      disabled={isChatLoading}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {!(huggingFaceApiKey || import.meta.env.VITE_HUGGINGFACE_API_KEY) && (
+                  <p className="text-xs text-destructive">
+                    Warning: Hugging Face API key not found. Please set VITE_HUGGINGFACE_API_KEY in your .env file or store it in localStorage as 'huggingface_api_key'
+                  </p>
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>
