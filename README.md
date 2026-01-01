@@ -58,7 +58,7 @@ This project is built with:
 
 ```bash
 # Clone the repository
-git clone https://github.com/kushalpok01/MajorProject-Frontend.git
+git clone https://github.com/MajorProject-Frontend.git
 
 # Install dependencies
 npm install

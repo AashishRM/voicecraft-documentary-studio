@@ -7,6 +7,7 @@ interface AudioClip {
   duration: number;
   trackIndex?: number;
   trackVolume?: number;
+  startTime?: number; // Start time on timeline in seconds
 }
 
 interface UseVideoExportProps {
@@ -114,12 +115,13 @@ export const useVideoExport = ({
       });
 
       // Load all audio buffers for each track (including video clips)
-      const trackBuffers = new Map<number, AudioBuffer[]>();
+      // Map clips to their buffers so we can access startTime later
+      const trackClipsWithBuffers = new Map<number, Array<{ clip: typeof playableClips[0], buffer: AudioBuffer }>>();
       let totalClips = 0;
       let loadedClips = 0;
 
       for (const [trackIndex, trackClips] of clipsByTrack.entries()) {
-        const buffers: AudioBuffer[] = [];
+        const clipsWithBuffers: Array<{ clip: typeof playableClips[0], buffer: AudioBuffer }> = [];
         for (const clip of trackClips) {
           // Use audioUrl if available, otherwise use videoUrl (video files contain audio)
           const audioSource = clip.audioUrl || clip.videoUrl;
@@ -129,7 +131,7 @@ export const useVideoExport = ({
               const response = await fetch(audioSource);
               const arrayBuffer = await response.arrayBuffer();
               const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-              buffers.push(audioBuffer);
+              clipsWithBuffers.push({ clip, buffer: audioBuffer });
               loadedClips++;
               setExportProgress(Math.round((loadedClips / totalClips) * 15));
             } catch (err) {
@@ -137,37 +139,63 @@ export const useVideoExport = ({
             }
           }
         }
-        if (buffers.length > 0) {
-          trackBuffers.set(trackIndex, buffers);
+        if (clipsWithBuffers.length > 0) {
+          trackClipsWithBuffers.set(trackIndex, clipsWithBuffers);
         }
       }
 
-      if (trackBuffers.size === 0) {
+      if (trackClipsWithBuffers.size === 0) {
         throw new Error('No audio could be decoded');
       }
 
-      // Merge clips within each track (sequential)
+      // Merge clips within each track respecting startTime positions
       const mergedTrackBuffers = new Map<number, AudioBuffer>();
-      for (const [trackIndex, buffers] of trackBuffers.entries()) {
-        if (buffers.length === 0) continue;
+      for (const [trackIndex, clipsWithBuffers] of trackClipsWithBuffers.entries()) {
+        if (!clipsWithBuffers || clipsWithBuffers.length === 0) continue;
         
-        const sampleRate = buffers[0].sampleRate;
-        const totalDuration = buffers.reduce((sum, buf) => sum + buf.duration, 0);
-        const totalLength = Math.ceil(totalDuration * sampleRate);
+        // Sort clips by startTime
+        const sortedClips = [...clipsWithBuffers].sort((a, b) => {
+          const aStart = a.clip.startTime ?? 0;
+          const bStart = b.clip.startTime ?? 0;
+          return aStart - bStart;
+        });
+        
+        if (sortedClips.length === 0) continue;
+        
+        const sampleRate = sortedClips[0].buffer.sampleRate;
+        const numberOfChannels = Math.max(...sortedClips.map(item => item.buffer.numberOfChannels));
+        
+        // Calculate total duration based on latest clip end time
+        const maxEndTime = Math.max(
+          ...sortedClips.map(({ clip, buffer }) => {
+            const startTime = clip.startTime ?? 0;
+            return startTime + buffer.duration;
+          })
+        );
+        const totalLength = Math.ceil(maxEndTime * sampleRate);
+        
         const mergedBuffer = audioContext.createBuffer(
-          buffers[0].numberOfChannels,
+          numberOfChannels,
           totalLength,
           sampleRate
         );
 
-        let offset = 0;
-        for (const buffer of buffers) {
-          for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+        // Place each buffer at its startTime position
+        for (const { clip, buffer } of sortedClips) {
+          const startTime = clip.startTime ?? 0;
+          const offset = Math.floor(startTime * sampleRate);
+          
+          for (let channel = 0; channel < numberOfChannels; channel++) {
             const channelData = mergedBuffer.getChannelData(channel);
-            const sourceData = buffer.getChannelData(channel);
-            channelData.set(sourceData, offset);
+            const sourceData = buffer.getChannelData(
+              Math.min(channel, buffer.numberOfChannels - 1)
+            );
+            
+            // Copy audio data starting at the offset position (mix if overlapping)
+            for (let i = 0; i < sourceData.length && (offset + i) < channelData.length; i++) {
+              channelData[offset + i] += sourceData[i];
+            }
           }
-          offset += buffer.length;
         }
         
         mergedTrackBuffers.set(trackIndex, mergedBuffer);
@@ -247,16 +275,20 @@ export const useVideoExport = ({
       }
 
       // Calculate export duration to match timeline player
-      // Timeline player uses: max of all track durations (where each track duration = sum of clip durations)
-      const trackDurations = Array.from(clipsByTrack.values()).map(trackClips => 
-        trackClips.reduce((sum, clip) => sum + clip.duration, 0)
+      // Timeline player uses: max end time of all clips (startTime + duration)
+      const timelineTotalDuration = Math.max(
+        ...playableClips.map(clip => {
+          const startTime = clip.startTime ?? 0;
+          return startTime + clip.duration;
+        }),
+        0
       );
-      const timelineTotalDuration = trackDurations.length > 0 ? Math.max(...trackDurations) : 0;
       
       // Use the timeline duration (max track duration) as the export duration
       // This ensures the exported video matches exactly what plays in the timeline
+      // Video will loop if audio is longer than video
       const totalAudioDuration = Math.max(maxDuration, timelineTotalDuration);
-      const exportDuration = videoFile ? Math.min(videoElement.duration, totalAudioDuration) : totalAudioDuration;
+      const exportDuration = totalAudioDuration; // Always use audio duration, video will loop if needed
       const mergedBuffer = finalMergedBuffer;
 
       // Create audio destination

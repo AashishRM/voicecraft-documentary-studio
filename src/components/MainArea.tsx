@@ -26,6 +26,7 @@ interface MainAreaProps {
   onAddTrack?: () => void;
   selectedVideo: File | null;
   onVideoSelect: (file: File | null) => void;
+  onClipPositionUpdate?: (clipId: string, startTime: number) => void;
 }
 
 const TimelineDropZone: React.FC<{ children: React.ReactNode; trackId?: string; contentWidth?: number }> = ({ children, trackId = 'timeline', contentWidth }) => {
@@ -33,13 +34,13 @@ const TimelineDropZone: React.FC<{ children: React.ReactNode; trackId?: string; 
     id: trackId,
   });
 
-  // p-4 = 16px padding on each side = 32px total
-  const padding = 32;
+  // No padding to keep tracks connected
+  const padding = 0;
 
   return (
     <div
       ref={setNodeRef}
-      className={`transition-colors ${isOver ? 'bg-primary/10 border-primary' : 'bg-card border-border'} border-2 border-dashed rounded-lg p-4 min-h-32`}
+      className={`transition-colors ${isOver ? 'bg-primary/10' : 'bg-transparent'} min-h-[60px]`}
       style={contentWidth ? { width: `${contentWidth + padding}px`, minWidth: '100%' } : undefined}
     >
       {children}
@@ -164,7 +165,8 @@ export const MainArea: React.FC<MainAreaProps> = ({
   onVideoAudioExtracted,
   onAddTrack,
   selectedVideo,
-  onVideoSelect
+  onVideoSelect,
+  onClipPositionUpdate
 }) => {
   const [zoom, setZoom] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -174,9 +176,25 @@ export const MainArea: React.FC<MainAreaProps> = ({
   const [videoAudioClip, setVideoAudioClip] = useState<AudioClip | null>(null);
   const [extractingAudio, setExtractingAudio] = useState(false);
   const { toast } = useToast();
+  const [draggingClipId, setDraggingClipId] = useState<string | null>(null);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartTime, setDragStartTime] = useState(0);
+  const [hasDragged, setHasDragged] = useState(false);
+  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  const timelineContainerRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const timelineWrapperRef = useRef<HTMLDivElement>(null);
   
   const handleVideoSyncToggle = () => {
     setVideoSyncEnabled(!videoSyncEnabled);
+  };
+
+  // Handle clip drag start
+  const handleClipDragStart = (e: React.MouseEvent, clip: AudioClip, currentStartTime: number) => {
+    e.stopPropagation();
+    setDraggingClipId(clip.id);
+    setDragStartX(e.clientX);
+    setDragStartTime(currentStartTime);
+    setHasDragged(false);
   };
 
   // Use multi-track audio player for simultaneous playback
@@ -194,6 +212,87 @@ export const MainArea: React.FC<MainAreaProps> = ({
 
   // Use multi-track player for actual playback
   const activePlayer = multiTrackPlayer;
+
+  // Handle clip drag
+  useEffect(() => {
+    if (!draggingClipId) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const clip = timelineClips.find(c => c.id === draggingClipId);
+      if (!clip || clip.trackIndex === undefined) return;
+
+      const trackIndex = clip.trackIndex;
+      const container = timelineContainerRefs.current.get(trackIndex);
+      if (!container) return;
+
+      const deltaX = e.clientX - dragStartX;
+      // Only consider it a drag if moved more than 5 pixels
+      if (Math.abs(deltaX) > 5) {
+        setHasDragged(true);
+      }
+
+      const deltaTime = deltaX / (50 * zoom); // pixelsPerSecond = 50 * zoom
+      const newStartTime = Math.max(0, dragStartTime + deltaTime);
+
+      // Update clip position immediately for visual feedback
+      if (onClipPositionUpdate) {
+        onClipPositionUpdate(draggingClipId, newStartTime);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setDraggingClipId(null);
+      // Reset hasDragged after a short delay to allow click handler to check it
+      setTimeout(() => setHasDragged(false), 0);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingClipId, dragStartX, dragStartTime, zoom, timelineClips, onClipPositionUpdate]);
+
+  // Handle playhead drag
+  const handlePlayheadDragStart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDraggingPlayhead(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingPlayhead) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!timelineWrapperRef.current) return;
+      
+      // Try to get the container that has the timeline content
+      const timelineContainer = timelineWrapperRef.current.querySelector('[style*="width"]') as HTMLElement;
+      if (!timelineContainer) return;
+      
+      const containerRect = timelineContainer.getBoundingClientRect();
+      const scrollLeft = timelineWrapperRef.current.scrollLeft || 0;
+      const x = e.clientX - containerRect.left + scrollLeft;
+      const pixelsPerSecond = 50 * zoom;
+      const time = Math.max(0, x / pixelsPerSecond);
+      
+      activePlayer.seekToTime(time);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingPlayhead(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingPlayhead, zoom, activePlayer]);
 
   // Group clips by track for display
   const clipsByTrack = new Map<number, AudioClip[]>();
@@ -530,20 +629,81 @@ export const MainArea: React.FC<MainAreaProps> = ({
               <div className="w-full">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium">Audio Timeline</h3>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      onAddTrack?.();
-                    }}
-                    className="text-xs"
-                  >
-                    + Add Track
-                  </Button>
+  
                 </div>
                 
+                {/* Time Ruler */}
+                {(() => {
+                  const tracks = new Map<number, AudioClip[]>();
+                  timelineClips.forEach(clip => {
+                    const trackIndex = clip.trackIndex ?? 0;
+                    if (!tracks.has(trackIndex)) {
+                      tracks.set(trackIndex, []);
+                    }
+                    tracks.get(trackIndex)!.push(clip);
+                  });
+                  
+                  const maxTrackDuration = Math.max(
+                    ...Array.from(tracks.values()).map(trackClips => {
+                      if (trackClips.length === 0) return 10;
+                      return Math.max(
+                        ...trackClips.map(clip => {
+                          const startTime = clip.startTime ?? 0;
+                          return startTime + clip.duration;
+                        }),
+                        10
+                      );
+                    }),
+                    10
+                  );
+                  
+                  const pixelsPerSecond = 50 * zoom;
+                  const timelineWidth = maxTrackDuration * pixelsPerSecond;
+                  
+                  // Generate time markers
+                  const timeMarkers = [];
+                  const markerInterval = zoom < 0.5 ? 10 : zoom < 1 ? 5 : zoom < 2 ? 2 : 1;
+                  for (let t = 0; t <= maxTrackDuration + 5; t += markerInterval) {
+                    timeMarkers.push(t);
+                  }
+                  
+                  const playheadPosition = activePlayer.globalTime * pixelsPerSecond;
+                  
+                  return (
+                    <div className="mb-2 border-b border-border pb-1">
+                      <div className="relative" style={{ height: '24px', marginLeft: '160px' }}>
+                        <div style={{ width: `${timelineWidth}px` }}>
+                          {timeMarkers.map((t) => (
+                            <div
+                              key={t}
+                              className="absolute bottom-0 flex flex-col items-center"
+                              style={{ left: `${t * pixelsPerSecond}px` }}
+                            >
+                              <span className="text-[10px] text-muted-foreground mb-0.5">
+                                {formatDuration(t)}
+                              </span>
+                              <div className="w-px h-2 bg-border" />
+                            </div>
+                          ))}
+                          
+                          {/* Playhead line on ruler */}
+                          {activePlayer.globalTime >= 0 && (
+                            <div
+                              className={`absolute top-0 bottom-0 w-0.5 z-20 ${isDraggingPlayhead ? 'bg-primary cursor-ew-resize' : 'bg-primary cursor-ew-resize'}`}
+                              style={{ left: `${Math.min(playheadPosition, timelineWidth)}px` }}
+                              onMouseDown={handlePlayheadDragStart}
+                            >
+                              <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-background shadow-sm" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
                 {/* Group clips by track */}
-                <div className="overflow-x-auto w-full">
+                <div ref={timelineWrapperRef} className="overflow-x-auto w-full relative">
                 {(() => {
                   const tracks = new Map<number, AudioClip[]>();
                   timelineClips.forEach(clip => {
@@ -566,9 +726,16 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   
                   // Calculate total duration across all tracks for timeline width
                   const maxTrackDuration = Math.max(
-                    ...Array.from(tracks.values()).map(trackClips => 
-                      trackClips.reduce((sum, clip) => sum + clip.duration, 0)
-                    ),
+                    ...Array.from(tracks.values()).map(trackClips => {
+                      if (trackClips.length === 0) return 10;
+                      return Math.max(
+                        ...trackClips.map(clip => {
+                          const startTime = clip.startTime ?? 0;
+                          return startTime + clip.duration;
+                        }),
+                        10
+                      );
+                    }),
                     10 // Minimum 10 seconds
                   );
                   
@@ -576,16 +743,18 @@ export const MainArea: React.FC<MainAreaProps> = ({
                   const pixelsPerSecond = 50 * zoom;
                   const timelineWidth = maxTrackDuration * pixelsPerSecond;
                   
+                  const playheadPosition = activePlayer.globalTime * pixelsPerSecond;
+                  
                   return (
-                    <div className="space-y-3">
+                    <div className="relative">
                       {tracksToShow.map(trackIndex => {
                         const trackClips = tracks.get(trackIndex) || [];
-                        const trackName = trackIndex === 0 ? 'Track 1 (Video Audio)' : `Track ${trackIndex + 1}`;
+                        const trackName = trackIndex === 0 ? 'Track 1' : `Track ${trackIndex + 1}`;
                         const trackVolume = activePlayer.getTrackVolume(trackIndex);
                         const trackDuration = trackClips.reduce((sum, clip) => sum + clip.duration, 0);
                         
                         return (
-                          <div key={trackIndex} className="space-y-2">
+                          <div key={trackIndex} className="relative border-b border-border last:border-b-0">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-medium text-muted-foreground w-32">{trackName}</span>
                               <span className="text-xs text-muted-foreground w-16">
@@ -610,11 +779,30 @@ export const MainArea: React.FC<MainAreaProps> = ({
                             </div>
                             <TimelineDropZone trackId={`timeline-track-${trackIndex}`} contentWidth={trackClips.length > 0 ? timelineWidth : undefined}>
                               {trackClips.length === 0 ? (
-                                <div className="text-center py-4 text-muted-foreground text-xs" style={{ minHeight: '60px' }}>
+                                <div className="text-center py-4 text-muted-foreground text-xs relative" style={{ minHeight: '60px' }}>
+                                  {/* Playhead line for empty track */}
+                                  {activePlayer.globalTime >= 0 && (
+                                    <div
+                                      className={`absolute top-0 bottom-0 w-0.5 z-20 ${isDraggingPlayhead ? 'bg-primary cursor-ew-resize' : 'bg-primary pointer-events-none'}`}
+                                      style={{ 
+                                        left: `${Math.min(playheadPosition, timelineWidth)}px`,
+                                      }}
+                                      onMouseDown={handlePlayheadDragStart}
+                                    >
+                                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-background shadow-sm" />
+                                    </div>
+                                  )}
                                   Drop audio or video clips here
                                 </div>
                               ) : (
                                 <div 
+                                  ref={(el) => {
+                                    if (el) {
+                                      timelineContainerRefs.current.set(trackIndex, el);
+                                    } else {
+                                      timelineContainerRefs.current.delete(trackIndex);
+                                    }
+                                  }}
                                   className="relative"
                                   style={{ 
                                     width: `${timelineWidth}px`,
@@ -623,12 +811,47 @@ export const MainArea: React.FC<MainAreaProps> = ({
                                     overflow: 'hidden'
                                   }}
                                 >
-                                  {trackClips.map((clip, index) => {
+                                  {/* Playhead line for track */}
+                                  {activePlayer.globalTime >= 0 && (
+                                    <div
+                                      className={`absolute top-0 bottom-0 w-0.5 z-20 ${isDraggingPlayhead ? 'bg-primary cursor-ew-resize' : 'bg-primary pointer-events-none'}`}
+                                      style={{ 
+                                        left: `${Math.min(playheadPosition, timelineWidth)}px`,
+                                      }}
+                                      onMouseDown={handlePlayheadDragStart}
+                                    >
+                                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-primary rounded-full border-2 border-background shadow-sm" />
+                                    </div>
+                                  )}
+                                  {trackClips
+                                    .sort((a, b) => {
+                                      // Sort by startTime if available, otherwise by original order
+                                      const aStart = a.startTime ?? 0;
+                                      const bStart = b.startTime ?? 0;
+                                      return aStart - bStart;
+                                    })
+                                    .map((clip, index) => {
                                     const hasAudio = !!clip.audioUrl;
                                     const isVideo = !!clip.isVideo;
-                                    // Calculate clip start time and position within its track
-                                    const trackClipsBefore = trackClips.slice(0, index);
-                                    const clipStartTime = trackClipsBefore.reduce((sum, c) => sum + c.duration, 0);
+                                    // Calculate clip start time - use startTime if available, otherwise sequential
+                                    let clipStartTime: number;
+                                    if (clip.startTime !== undefined) {
+                                      clipStartTime = clip.startTime;
+                                    } else {
+                                      // Fallback to sequential positioning
+                                      const sortedClips = [...trackClips].sort((a, b) => {
+                                        const aStart = a.startTime ?? 0;
+                                        const bStart = b.startTime ?? 0;
+                                        return aStart - bStart;
+                                      });
+                                      const clipIndex = sortedClips.findIndex(c => c.id === clip.id);
+                                      const trackClipsBefore = sortedClips.slice(0, clipIndex);
+                                      clipStartTime = trackClipsBefore.reduce((sum, c) => {
+                                        const cStart = c.startTime ?? 0;
+                                        const cEnd = cStart + c.duration;
+                                        return Math.max(sum, cEnd);
+                                      }, 0);
+                                    }
                                     const clipLeft = clipStartTime * pixelsPerSecond;
                                     const clipWidth = clip.duration * pixelsPerSecond;
                                     // Ensure clip doesn't exceed container bounds
@@ -637,11 +860,13 @@ export const MainArea: React.FC<MainAreaProps> = ({
                                     const isCurrentlyPlaying = activePlayer.isPlaying && 
                                       activePlayer.globalTime >= clipStartTime && 
                                       activePlayer.globalTime < clipStartTime + clip.duration;
+                                    const isDragging = draggingClipId === clip.id;
                                     
                                     return (
                                       <div
                                         key={`${clip.id}-${index}`}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                          if (isDragging || hasDragged) return;
                                           if (hasAudio || isVideo) {
                                             activePlayer.seekToTime(clipStartTime);
                                             if (!activePlayer.isPlaying) {
@@ -649,7 +874,16 @@ export const MainArea: React.FC<MainAreaProps> = ({
                                             }
                                           }
                                         }}
-                                        className={`absolute rounded-lg p-2 group cursor-pointer transition-all ${
+                                        onMouseDown={(e) => {
+                                          if (e.button === 0) { // Left mouse button
+                                            handleClipDragStart(e, clip, clipStartTime);
+                                          }
+                                        }}
+                                        className={`absolute rounded-lg p-2 group transition-all ${
+                                          isDragging
+                                            ? 'cursor-grabbing z-50 opacity-80'
+                                            : 'cursor-grab'
+                                        } ${
                                           isCurrentlyPlaying 
                                             ? 'bg-primary/40 border-2 border-primary ring-2 ring-primary/30 z-10' 
                                             : isVideo

@@ -19,6 +19,7 @@ export interface AudioClip {
   isVideoAudio?: boolean; // Whether this is the audio from the video file
   isVideo?: boolean; // Whether this is a video clip
   trackVolume?: number; // Volume for this track (0-1, default 1)
+  startTime?: number; // Start time on timeline in seconds (for horizontal positioning)
 }
 
 interface GeneratedClip {
@@ -316,6 +317,15 @@ export const DocumentaryStudio: React.FC = () => {
             }}
             selectedVideo={selectedVideo}
             onVideoSelect={setSelectedVideo}
+            onClipPositionUpdate={(clipId, startTime) => {
+              setTimelineClips(prev => 
+                prev.map(clip => 
+                  clip.id === clipId 
+                    ? { ...clip, startTime: Math.max(0, startTime) }
+                    : clip
+                )
+              );
+            }}
           />
         </div>
 

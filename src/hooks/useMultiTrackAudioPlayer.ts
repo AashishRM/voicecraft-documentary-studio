@@ -29,22 +29,34 @@ export const useMultiTrackAudioPlayer = ({
   const [globalTime, setGlobalTime] = useState(0);
   const [trackVolumes, setTrackVolumes] = useState<Map<number, number>>(new Map());
   
-  const audioRefs = useRef<Map<number, HTMLAudioElement>>(new Map());
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const intervalRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const clipsRef = useRef<AudioClip[]>(clips);
+  const trackVolumesRef = useRef<Map<number, number>>(new Map());
 
-  // Group clips by track (including video clips)
-  const clipsByTrack = new Map<number, AudioClip[]>();
-  clips.forEach(clip => {
-    // Include clips with audioUrl OR videoUrl (video clips can play audio)
-    if (clip.audioUrl || clip.videoUrl) {
-      const trackIndex = clip.trackIndex ?? 0;
-      if (!clipsByTrack.has(trackIndex)) {
-        clipsByTrack.set(trackIndex, []);
+  // Update clips ref when clips change
+  useEffect(() => {
+    clipsRef.current = clips;
+  }, [clips]);
+
+  // Group clips by track (including video clips) - memoized
+  const clipsByTrack = useRef<Map<number, AudioClip[]>>(new Map());
+  
+  useEffect(() => {
+    const newClipsByTrack = new Map<number, AudioClip[]>();
+    clips.forEach(clip => {
+      // Include clips with audioUrl OR videoUrl (video clips can play audio)
+      if (clip.audioUrl || clip.videoUrl) {
+        const trackIndex = clip.trackIndex ?? 0;
+        if (!newClipsByTrack.has(trackIndex)) {
+          newClipsByTrack.set(trackIndex, []);
+        }
+        newClipsByTrack.get(trackIndex)!.push(clip);
       }
-      clipsByTrack.get(trackIndex)!.push(clip);
-    }
-  });
+    });
+    clipsByTrack.current = newClipsByTrack;
+  }, [clips]);
 
   // Initialize track volumes
   useEffect(() => {
@@ -54,17 +66,19 @@ export const useMultiTrackAudioPlayer = ({
         setTrackVolumes(prev => {
           const newMap = new Map(prev);
           newMap.set(clip.trackIndex!, currentVolume);
+          trackVolumesRef.current = newMap;
           return newMap;
         });
       }
     });
-  }, [clips]);
+  }, [clips, trackVolumes]);
 
-  // Calculate total duration (max of all tracks)
+  // Calculate total duration (max end time of all clips)
   const totalDuration = Math.max(
-    ...Array.from(clipsByTrack.values()).map(trackClips => 
-      trackClips.reduce((sum, clip) => sum + clip.duration, 0)
-    ),
+    ...clips.map(clip => {
+      const startTime = clip.startTime ?? 0;
+      return startTime + clip.duration;
+    }),
     0
   );
 
@@ -75,22 +89,104 @@ export const useMultiTrackAudioPlayer = ({
     }
   }, []);
 
+  const isPlayingRef = useRef(false);
+  
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   const startTimeTracking = useCallback(() => {
     clearTimeInterval();
     intervalRef.current = window.setInterval(() => {
-      // Get the current time from the first playing audio
-      const firstAudio = Array.from(audioRefs.current.values())[0];
-      if (firstAudio && !firstAudio.paused) {
-        const elapsed = (performance.now() - startTimeRef.current) / 1000;
-        const time = Math.min(elapsed, totalDuration);
-        setCurrentTime(time);
-        setGlobalTime(time);
+      if (!isPlayingRef.current) return;
+      
+      const elapsed = (performance.now() - startTimeRef.current) / 1000;
+      const currentTotalDuration = Math.max(
+        ...clipsRef.current.map(clip => {
+          const startTime = clip.startTime ?? 0;
+          return startTime + clip.duration;
+        }),
+        0
+      );
+      const time = Math.min(elapsed, currentTotalDuration);
+      setCurrentTime(time);
+      setGlobalTime(time);
+      
+      // Stop playback if we've reached the end
+      if (time >= currentTotalDuration && currentTotalDuration > 0) {
+        audioRefs.current.forEach(audio => {
+          audio.pause();
+          audio.src = '';
+        });
+        audioRefs.current.clear();
+        setIsPlaying(false);
+        setCurrentTime(currentTotalDuration);
+        setGlobalTime(currentTotalDuration);
+        clearTimeInterval();
+        onComplete?.();
+        return;
       }
+      
+      // Manage clip playback based on current time
+      clipsByTrack.current.forEach((trackClips, trackIndex) => {
+        trackClips.forEach((clip) => {
+          const clipStartTime = clip.startTime ?? 0;
+          const clipEndTime = clipStartTime + clip.duration;
+          const clipKey = `${trackIndex}-${clip.id}`;
+          const audio = audioRefs.current.get(clipKey);
+          
+          // Check if clip should be playing
+          const shouldBePlaying = time >= clipStartTime && time < clipEndTime;
+          
+          if (shouldBePlaying && !audio) {
+            // Start clip if it should be playing but isn't
+            const audioSource = clip.audioUrl || clip.videoUrl;
+            if (!audioSource) return;
+            
+            const newAudio = new Audio(audioSource);
+            // Get volume from ref
+            const volume = trackVolumesRef.current.get(trackIndex) ?? clip.trackVolume ?? 1.0;
+            newAudio.volume = volume;
+            
+            const clipOffset = time - clipStartTime;
+            newAudio.currentTime = Math.min(clipOffset, clip.duration);
+            
+            audioRefs.current.set(clipKey, newAudio);
+            
+            newAudio.addEventListener('ended', () => {
+              audioRefs.current.delete(clipKey);
+            });
+            
+            newAudio.addEventListener('error', (e) => {
+              console.error(`Audio playback error for clip ${clip.id}:`, e);
+              audioRefs.current.delete(clipKey);
+            });
+            
+            newAudio.play().catch(err => {
+              console.error(`Failed to play clip ${clip.id}:`, err);
+              audioRefs.current.delete(clipKey);
+            });
+          } else if (!shouldBePlaying && audio) {
+            // Stop clip if it shouldn't be playing
+            audio.pause();
+            audio.src = '';
+            audioRefs.current.delete(clipKey);
+          } else if (shouldBePlaying && audio && !audio.paused) {
+            // Update audio position if it's playing (sync check)
+            const clipOffset = time - clipStartTime;
+            const expectedTime = Math.min(clipOffset, clip.duration);
+            // Only update if significantly off (more than 0.2 seconds) to avoid constant seeking
+            if (Math.abs(audio.currentTime - expectedTime) > 0.2) {
+              audio.currentTime = expectedTime;
+            }
+          }
+        });
+      });
     }, 100);
-  }, [clearTimeInterval, totalDuration]);
+  }, [clearTimeInterval, onComplete]);
 
   const playAllTracks = useCallback(() => {
-    if (clipsByTrack.size === 0) {
+    if (clipsByTrack.current.size === 0) {
       console.log('No tracks to play');
       return;
     }
@@ -98,74 +194,31 @@ export const useMultiTrackAudioPlayer = ({
     // Clean up previous audio
     audioRefs.current.forEach(audio => {
       audio.pause();
-      audio.currentTime = 0;
+      audio.src = '';
     });
     audioRefs.current.clear();
 
-    // Play all tracks simultaneously
-    const playPromises: Promise<void>[] = [];
-    
-    clipsByTrack.forEach((trackClips, trackIndex) => {
-      if (trackClips.length === 0) return;
-
-      // For each track, play the first clip (we can extend this to handle multiple clips per track later)
-      const firstClip = trackClips[0];
-      // Use audioUrl if available, otherwise use videoUrl (video files contain audio)
-      const audioSource = firstClip.audioUrl || firstClip.videoUrl;
-      if (!audioSource) return;
-
-      const audio = new Audio(audioSource);
-      const volume = trackVolumes.get(trackIndex) ?? firstClip.trackVolume ?? 1.0;
-      audio.volume = volume;
-      
-      audioRefs.current.set(trackIndex, audio);
-
-      // Set up event handlers
-      audio.addEventListener('ended', () => {
-        // Track finished, but other tracks may still be playing
-        audioRefs.current.delete(trackIndex);
-        
-        // Check if all tracks are done
-        if (audioRefs.current.size === 0) {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          setGlobalTime(0);
-          clearTimeInterval();
-          onComplete?.();
-        }
-      });
-
-      audio.addEventListener('error', (e) => {
-        console.error(`Audio playback error for track ${trackIndex}:`, e);
-        audioRefs.current.delete(trackIndex);
-      });
-
-      playPromises.push(audio.play().catch(err => {
-        console.error(`Failed to play track ${trackIndex}:`, err);
-        audioRefs.current.delete(trackIndex);
-      }));
-    });
-
-    Promise.all(playPromises).then(() => {
-      setIsPlaying(true);
-      startTimeRef.current = performance.now() - (globalTime * 1000);
-      startTimeTracking();
-    });
-  }, [clipsByTrack, trackVolumes, globalTime, clearTimeInterval, startTimeTracking, onComplete]);
+    // Start time tracking - it will manage clip playback dynamically
+    setIsPlaying(true);
+    startTimeRef.current = performance.now() - (globalTime * 1000);
+    startTimeTracking();
+  }, [globalTime, startTimeTracking]);
 
   const play = useCallback(() => {
-    if (audioRefs.current.size > 0) {
-      // Resume all playing tracks
-      audioRefs.current.forEach(audio => {
-        audio.play().catch(() => {});
-      });
-      setIsPlaying(true);
-      startTimeRef.current = performance.now() - (globalTime * 1000);
-      startTimeTracking();
-    } else {
-      playAllTracks();
-    }
-  }, [playAllTracks, globalTime, startTimeTracking]);
+    setIsPlaying(true);
+    startTimeRef.current = performance.now() - (globalTime * 1000);
+    
+    // Resume any paused audio elements
+    audioRefs.current.forEach(audio => {
+      if (audio.paused) {
+        audio.play().catch(err => {
+          console.error('Failed to resume audio:', err);
+        });
+      }
+    });
+    
+    startTimeTracking();
+  }, [globalTime, startTimeTracking]);
 
   const pause = useCallback(() => {
     audioRefs.current.forEach(audio => {
@@ -193,34 +246,13 @@ export const useMultiTrackAudioPlayer = ({
     // Pause all
     pause();
     
-    // Seek all tracks to the same time
-    clipsByTrack.forEach((trackClips, trackIndex) => {
-      if (trackClips.length === 0) return;
-      
-      const firstClip = trackClips[0];
-      // Use audioUrl if available, otherwise use videoUrl (video files contain audio)
-      const audioSource = firstClip.audioUrl || firstClip.videoUrl;
-      if (!audioSource) return;
-
-      const audio = new Audio(audioSource);
-      const volume = trackVolumes.get(trackIndex) ?? firstClip.trackVolume ?? 1.0;
-      audio.volume = volume;
-      audio.currentTime = Math.min(time, firstClip.duration);
-      
-      audioRefs.current.set(trackIndex, audio);
-      
-      audio.addEventListener('ended', () => {
-        audioRefs.current.delete(trackIndex);
-        if (audioRefs.current.size === 0) {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          setGlobalTime(0);
-          clearTimeInterval();
-          onComplete?.();
-        }
-      });
+    // Clear existing audio refs
+    audioRefs.current.forEach(audio => {
+      audio.pause();
+      audio.src = '';
     });
-
+    audioRefs.current.clear();
+    
     setGlobalTime(time);
     setCurrentTime(time);
     startTimeRef.current = performance.now() - (time * 1000);
@@ -228,7 +260,7 @@ export const useMultiTrackAudioPlayer = ({
     if (wasPlaying) {
       play();
     }
-  }, [clipsByTrack, trackVolumes, isPlaying, pause, clearTimeInterval, onComplete, play]);
+  }, [isPlaying, pause, play]);
 
   const togglePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -243,22 +275,25 @@ export const useMultiTrackAudioPlayer = ({
     setTrackVolumes(prev => {
       const newMap = new Map(prev);
       newMap.set(trackIndex, clampedVolume);
+      trackVolumesRef.current = newMap;
+      
+      // Update audio volume for all clips on this track
+      audioRefs.current.forEach((audio, clipKey) => {
+        if (clipKey.startsWith(`${trackIndex}-`)) {
+          audio.volume = clampedVolume;
+        }
+      });
+      
       return newMap;
     });
     
-    // Update audio volume if track is currently playing
-    const audio = audioRefs.current.get(trackIndex);
-    if (audio) {
-      audio.volume = clampedVolume;
-    }
-    
     // Update all clips on this track
-    clips.forEach(clip => {
+    clipsRef.current.forEach(clip => {
       if (clip.trackIndex === trackIndex) {
         clip.trackVolume = clampedVolume;
       }
     });
-  }, [clips]);
+  }, []);
 
   const getTrackVolume = useCallback((trackIndex: number) => {
     return trackVolumes.get(trackIndex) ?? 1.0;
