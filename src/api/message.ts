@@ -29,7 +29,7 @@ export interface TTSRequest {
 
 export const APISendMessage = async (body: TTSRequest) => {
   const response = await axios.post(
-    "http://127.0.0.1:8000/api/v1/synthesize/wav",
+    "https://fastspeech20-production.up.railway.app/api/v1/synthesize/wav",
     body,
     {
       responseType: "blob",
