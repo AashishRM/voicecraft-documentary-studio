@@ -34,6 +34,40 @@ interface DraggableGeneratedClipProps {
   onDelete: (clipId: string) => void;
 }
 
+// // Helper function to check if text contains only Devanagari characters and allowed punctuation
+// const isDevanagariOnly = (text: string): boolean => {
+//   // Devanagari Unicode range: U+0900 to U+097F
+//   // Allow spaces, newlines, and common punctuation
+//   const devanagariRegex = /^[\u0900-\u097F\s\n.,!?;:'"()\-]*$/;
+//   return devanagariRegex.test(text);
+// };
+
+// // Filter text to only include Devanagari characters and allowed punctuation
+// const filterToDevanagari = (text: string): string => {
+//   return Array.from(text)
+//     .filter(char => {
+//       const code = char.charCodeAt(0);
+//       // Allow Devanagari (U+0900 to U+097F), spaces, newlines, and common punctuation
+//       return (code >= 0x0900 && code <= 0x097F) || 
+//              char === ' ' || 
+//              char === '\n' || 
+//              ['.', ',', '!', '?', ';', ':', "'", '"', '(', ')', '-'].includes(char);
+//     })
+//     .join('');
+// };
+
+const MAX_SCRIPT_WORDS = 1000;
+
+const getWordCount = (text: string) => {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+};
+
+const limitWords = (text: string, maxWords: number) => {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(' ');
+};
+
 const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, onDelete }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
@@ -43,7 +77,7 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
       const audioElement = new Audio(clip.audioUrl);
       audioElement.addEventListener('ended', () => setIsPlaying(false));
       setAudio(audioElement);
-      
+
       return () => {
         audioElement.pause();
         audioElement.src = '';
@@ -78,9 +112,8 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
       style={style}
       {...listeners}
       {...attributes}
-      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${
-        isDragging ? 'opacity-50' : ''
-      }`}
+      className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'opacity-50' : ''
+        }`}
     >
       <div className="flex items-center gap-2 flex-1">
         <Music className="h-4 w-4 text-muted-foreground" />
@@ -123,13 +156,13 @@ const DraggableGeneratedClip: React.FC<DraggableGeneratedClipProps> = ({ clip, o
   );
 };
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
-  isOpen, 
-  onToggle, 
-  selectedVideo, 
-  generatedClips, 
+export const LeftSidebar: React.FC<LeftSidebarProps> = ({
+  isOpen,
+  onToggle,
+  selectedVideo,
+  generatedClips,
   onDeleteGeneratedClip,
-  onAddGeneratedClip 
+  onAddGeneratedClip
 }) => {
   const [projectInfoOpen, setProjectInfoOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('script');
@@ -153,17 +186,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     return new Promise((resolve) => {
       const audio = new Audio();
       const url = URL.createObjectURL(audioBlob);
-      
+
       audio.addEventListener('loadedmetadata', () => {
         resolve(audio.duration);
         URL.revokeObjectURL(url);
       });
-      
+
       audio.addEventListener('error', () => {
         resolve(0);
         URL.revokeObjectURL(url);
       });
-      
+
       audio.src = url;
     });
   };
@@ -173,16 +206,22 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     if (!msgText) return;
 
     setIsGenerating(true);
-    
+
     try {
-      const audioBlob = await APISendMessage({ text: msgText });
-      
+      const audioBlob = await APISendMessage({
+        text: msgText,
+        pitch_scale: 1.0,
+        energy_scale: 1.0,
+        duration_scale: 1.0,
+        output: "postnet",
+      });
+
       // Get duration from the audio blob
       const duration = await getAudioDuration(audioBlob);
-      
+
       // Create object URL for the audio blob
       const audioUrl = URL.createObjectURL(audioBlob);
-      
+
       // Create new generated clip
       const newClip: GeneratedClip = {
         id: `clip-${Date.now()}`,
@@ -197,7 +236,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       setNewMessage("");
     } catch (err) {
       console.error("Failed to generate voice:", err);
-      alert("Failed to generate voice. Please try again.");
+      alert("Unknown <unk> Token Error: Failed to generate voice. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -213,6 +252,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const fileSize = selectedVideo ? formatFileSize(selectedVideo.size) : '0 B';
+  const scriptWordCount = getWordCount(newMessage);
 
   useEffect(() => {
     if (scriptContent) {
@@ -226,9 +266,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
   // Load Hugging Face API key from environment variable or localStorage on mount
   useEffect(() => {
-    const apiKey = 
-      import.meta.env.VITE_HUGGINGFACE_API_KEY || 
-      localStorage.getItem('huggingface_api_key') || 
+    const apiKey =
+      import.meta.env.VITE_HUGGINGFACE_API_KEY ||
+      localStorage.getItem('huggingface_api_key') ||
       '';
     setHuggingFaceApiKey(apiKey);
   }, []);
@@ -246,7 +286,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     const now = Date.now();
     const timeSinceLastRequest = now - lastRequestTimeRef.current;
     const minDelay = 2000; // 2 seconds between requests
-    
+
     if (timeSinceLastRequest < minDelay && lastRequestTimeRef.current > 0) {
       const waitTime = Math.ceil((minDelay - timeSinceLastRequest) / 1000);
       alert(`Please wait ${waitTime} more second(s) before sending another message to avoid rate limits.`);
@@ -254,10 +294,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     }
 
     // Get API key from state, environment variable, or localStorage
-    const apiKey = 
-      huggingFaceApiKey || 
-      import.meta.env.VITE_HUGGINGFACE_API_KEY || 
-      localStorage.getItem('huggingface_api_key') || 
+    const apiKey =
+      huggingFaceApiKey ||
+      import.meta.env.VITE_HUGGINGFACE_API_KEY ||
+      localStorage.getItem('huggingface_api_key') ||
       '';
 
     if (!apiKey) {
@@ -278,15 +318,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     try {
       // Get response from Hugging Face
       const response = await APIChatWithHuggingFace(updatedMessages, apiKey);
-      
+
       // Add assistant response to chat
       const assistantMessage = { role: 'assistant' as const, content: response };
       setChatMessages([...updatedMessages, assistantMessage]);
     } catch (error: any) {
       console.error("Chatbot error:", error);
-      const errorMessage = { 
-        role: 'assistant' as const, 
-        content: `त्रुटि: ${error.message || 'च्याटबटबाट प्रतिक्रिया प्राप्त गर्न असफल भयो।'}` 
+      const errorMessage = {
+        role: 'assistant' as const,
+        content: `त्रुटि: ${error.message || 'च्याटबटबाट प्रतिक्रिया प्राप्त गर्न असफल भयो।'}`
       };
       setChatMessages([...updatedMessages, errorMessage]);
     } finally {
@@ -472,12 +512,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <TabsContent value="script" className="space-y-4">
             <div>
               <p className="text-sm text-muted-foreground mb-3">
-                Write or edit your script manually
+                Write or edit your script manually (Devanagari only)
               </p>
               <Textarea
-                placeholder="Enter your script here..."
+                placeholder={`Enter your script in Devanagari`}
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                // onChange={(e) => setNewMessage(filterToDevanagari(e.target.value))}
+                onChange={(e) => setNewMessage(limitWords(e.target.value, MAX_SCRIPT_WORDS))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -487,8 +528,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 className="min-h-32 resize-none"
                 disabled={isGenerating}
               />
-              <Button 
-                className="w-full mt-3" 
+              <p className={`text-xs ${scriptWordCount > MAX_SCRIPT_WORDS ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {scriptWordCount}/{MAX_SCRIPT_WORDS} words
+              </p>
+              <Button
+                className="w-full mt-3"
                 onClick={sendMessage}
                 disabled={isGenerating || !newMessage.trim()}
               >
@@ -502,7 +546,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               <p className="text-sm text-muted-foreground mb-3">
                 Chat with AI - Get elaborate responses in Devanagari Nepali
               </p>
-              
+
               {/* Chat Messages Display */}
               <div className="border rounded-lg p-3 mb-3 bg-background min-h-[200px] max-h-[300px] overflow-y-auto space-y-3">
                 {chatMessages.length === 0 ? (
@@ -516,11 +560,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-lg p-2 text-sm ${
-                          msg.role === 'user'
+                        className={`max-w-[80%] rounded-lg p-2 text-sm ${msg.role === 'user'
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-muted text-muted-foreground'
-                        }`}
+                          }`}
                       >
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       </div>
@@ -541,8 +584,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               <div className="space-y-2">
                 <Textarea
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Type your message here in English"
+                  onChange={(e) => setChatInput((e.target.value))}
+                  placeholder="Type your prompt here in English"
                   className="min-h-24 resize-none"
                   disabled={isChatLoading}
                   onKeyDown={(e) => {
@@ -553,17 +596,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   }}
                 />
                 <div className="flex gap-2">
-                  <Button 
-                    className="flex-1" 
-                    variant="secondary" 
+                  <Button
+                    className="flex-1"
+                    variant="secondary"
                     onClick={sendChatMessage}
                     disabled={isChatLoading || !chatInput.trim() || !(huggingFaceApiKey || import.meta.env.VITE_HUGGINGFACE_API_KEY)}
                   >
                     {isChatLoading ? 'प्रतिक्रिया आउँदैछ...' : 'Send the prompt'}
                   </Button>
                   {chatMessages.length > 0 && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => setChatMessages([])}
                       disabled={isChatLoading}
                     >

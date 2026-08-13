@@ -19,12 +19,23 @@ import { GetRequest, PostRequest } from "../plugins/https"
 // frontend/api/tts.ts
 import axios from "axios";
 
-export const APISendMessage = async (body: { text: string }) => {
+export interface TTSRequest {
+  text: string;
+  pitch_scale: number;
+  energy_scale: number;
+  duration_scale: number;
+  output: "postnet";
+}
+
+export const APISendMessage = async (body: TTSRequest) => {
   const response = await axios.post(
-    "http://127.0.0.1:8000/message",
+    "http://127.0.0.1:8000/api/v1/synthesize/wav",
     body,
     {
-      responseType: "blob", 
+      responseType: "blob",
+      headers: {
+        "Content-Type": "application/json",
+      },
     }
   );
 
