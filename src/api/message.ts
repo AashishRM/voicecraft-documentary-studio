@@ -1,4 +1,5 @@
 import { GetRequest, PostRequest } from "../plugins/https"
+import { createApiUrl } from "../config/baseURL";
 
 // export const APIGetAllMessages = ()=>{
 //     return GetRequest('message');
@@ -29,7 +30,7 @@ export interface TTSRequest {
 
 export const APISendMessage = async (body: TTSRequest) => {
   const response = await axios.post(
-    "https://fastspeech20-production.up.railway.app/api/v1/synthesize/wav",
+    createApiUrl("api/v1/synthesize/wav"),
     body,
     {
       responseType: "blob",

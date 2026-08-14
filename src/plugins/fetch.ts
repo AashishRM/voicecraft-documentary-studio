@@ -1,4 +1,4 @@
-import { BASE_URL } from "../config/baseURL";
+import { createApiUrl } from "../config/baseURL";
 
 export const fetchWithConfig = async (url: string, options: any = {}) => {
   const token = localStorage.getItem("token");
@@ -11,7 +11,8 @@ export const fetchWithConfig = async (url: string, options: any = {}) => {
     },
   };
 
-    const response = await fetch(`${BASE_URL}${url}`, config);
-    console.log("This is api", `${BASE_URL}${url}`);
+    const apiUrl = createApiUrl(url);
+    const response = await fetch(apiUrl, config);
+    console.log("This is api", apiUrl);
     return await response.json();
 };
